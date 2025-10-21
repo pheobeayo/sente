@@ -1,0 +1,176 @@
+'use client';
+
+import { useState, useCallback } from 'react';
+import { openContractCall } from '@stacks/connect';
+import { stacksDexContract } from '@/lib/contract';
+import { useStacksWallet } from './useStacksWallet';
+
+interface SwapState {
+  isSwapping: boolean;
+  error: string | null;
+  txId: string | null;
+}
+
+export function useStacksSwap() {
+  const { stxAddress, isConnected, userSession } = useStacksWallet();
+  const [swapState, setSwapState] = useState<SwapState>({
+    isSwapping: false,
+    error: null,
+    txId: null,
+  });
+
+  /**
+   * Get swap quote
+   */
+  const getQuote = useCallback(
+    async (tokenIn: string, tokenOut: string, amountIn: number) => {
+      if (!stxAddress) {
+        throw new Error('Wallet not connected');
+      }
+
+      try {
+        const quote = await stacksDexContract.getSwapQuote(
+          tokenIn,
+          tokenOut,
+          amountIn,
+          stxAddress
+        );
+        return quote;
+      } catch (error: any) {
+        console.error('Error getting quote:', error);
+        throw error;
+      }
+    },
+    [stxAddress]
+  );
+
+  /**
+   * Execute token swap
+   */
+  const executeSwap = useCallback(
+    async (
+      tokenIn: string,
+      tokenOut: string,
+      amountIn: number,
+      minAmountOut: number
+    ) => {
+      if (!stxAddress || !isConnected) {
+        setSwapState({
+          isSwapping: false,
+          error: 'Please connect your wallet first',
+          txId: null,
+        });
+        return;
+      }
+
+      setSwapState({
+        isSwapping: true,
+        error: null,
+        txId: null,
+      });
+
+      try {
+        // Build transaction options
+        const txOptions = await stacksDexContract.swapTokens(
+          tokenIn,
+          tokenOut,
+          amountIn,
+          minAmountOut,
+          stxAddress
+        );
+
+        // Open wallet for signing
+        await openContractCall({
+          ...txOptions,
+          onFinish: (data) => {
+            console.log('Swap transaction broadcast:', data);
+            setSwapState({
+              isSwapping: false,
+              error: null,
+              txId: data.txId,
+            });
+          },
+          onCancel: () => {
+            console.log('Swap cancelled by user');
+            setSwapState({
+              isSwapping: false,
+              error: 'Transaction cancelled',
+              txId: null,
+            });
+          },
+        });
+      } catch (error: any) {
+        console.error('Swap failed:', error);
+        setSwapState({
+          isSwapping: false,
+          error: error.message || 'Swap failed',
+          txId: null,
+        });
+        throw error;
+      }
+    },
+    [stxAddress, isConnected]
+  );
+
+  /**
+   * Calculate price impact
+   */
+  const calculatePriceImpact = useCallback(
+    (amountIn: number, amountOut: number, reserveIn: number, reserveOut: number) => {
+      if (reserveIn === 0 || reserveOut === 0) return 0;
+
+      const spotPrice = reserveOut / reserveIn;
+      const effectivePrice = amountOut / amountIn;
+      const priceImpact = ((spotPrice - effectivePrice) / spotPrice) * 100;
+
+      return Math.abs(priceImpact);
+    },
+    []
+  );
+
+  /**
+   * Calculate minimum output with slippage
+   */
+  const calculateMinOutput = useCallback(
+    (amountOut: number, slippageTolerance: number) => {
+      return Math.floor(amountOut * (1 - slippageTolerance / 100));
+    },
+    []
+  );
+
+  /**
+   * Get transaction status
+   */
+  const getTransactionStatus = useCallback(
+    async (txId: string) => {
+      try {
+        return await stacksDexContract.getTransactionStatus(txId);
+      } catch (error) {
+        console.error('Error fetching transaction status:', error);
+        throw error;
+      }
+    },
+    []
+  );
+
+  /**
+   * Reset swap state
+   */
+  const resetSwapState = useCallback(() => {
+    setSwapState({
+      isSwapping: false,
+      error: null,
+      txId: null,
+    });
+  }, []);
+
+  return {
+    ...swapState,
+    getQuote,
+    executeSwap,
+    calculatePriceImpact,
+    calculateMinOutput,
+    getTransactionStatus,
+    resetSwapState,
+  };
+}
