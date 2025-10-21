@@ -1,8 +1,10 @@
 import React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { MessageCircle, Send } from 'lucide-react';
 import { FaXTwitter } from "react-icons/fa6";
 import { FaGithub } from "react-icons/fa6";
+import logo from '@/public/logo.png';
 
 export default function Footer() {
   const productLinks = [
@@ -38,12 +40,11 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-8">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <Link href="/" className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-900 to-blue-600 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-xl">S</span>
+            <Link href="/" className="flex items-center gap-3">
+            <div className="flex items-center justify-center">
+              <Image src={logo} alt="" width={90} height={90} />
               </div>
-              <span className="text-2xl font-bold text-white">Sente</span>
-            </Link>
+          </Link>
             <p className="text-gray-400 mb-6 max-w-sm">
               The most efficient decentralized exchange on Stacks. Trade, earn, and build on the leading community-driven DEX.
             </p>

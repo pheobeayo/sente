@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { Menu, X, Wallet, ChevronDown, LogOut, Copy, ExternalLink, CheckCircle } from 'lucide-react';
 import { useStacksWallet } from '@/hooks/useStacksWallet';
+import logo from '@/public/logo.png';
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -91,10 +93,9 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-900 to-blue-600 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-xl">S</span>
-            </div>
-            <span className="text-2xl font-bold text-white">Sente</span>
+            <div className="flex items-center justify-center">
+              <Image src={logo} alt="" width={90} height={90} />
+              </div>
           </Link>
 
           {/* Desktop Navigation */}
