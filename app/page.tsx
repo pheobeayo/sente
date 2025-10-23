@@ -244,7 +244,7 @@ export default function Home() {
                     <span key={i} className="text-yellow-400 text-xl">★</span>
                   ))}
                 </div>
-                <p className="text-gray-300 mb-6 italic">"{testimonial.quote}"</p>
+                <p className="text-gray-300 mb-6 italic">`quot;`{testimonial.quote}`quot;`</p>
                 <div>
                   <div className="text-white font-bold">{testimonial.author}</div>
                   <div className="text-gray-400 text-sm">{testimonial.role}</div>

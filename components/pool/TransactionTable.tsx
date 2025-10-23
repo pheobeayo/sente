@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ExternalLink, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 
 interface Transaction {
   id: string;
@@ -56,19 +56,7 @@ const mockTransactions: Transaction[] = [
 ];
 
 export default function TransactionTable() {
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'swap':
-        return <ArrowUpRight className="w-4 h-4" />;
-      case 'add':
-        return <ArrowDownLeft className="w-4 h-4 text-green-400" />;
-      case 'remove':
-        return <ArrowUpRight className="w-4 h-4 text-red-400" />;
-      default:
-        return null;
-    }
-  };
-
+ 
   const getTypeBadge = (type: string) => {
     const badges = {
       swap: 'bg-blue-600/20 text-blue-400',

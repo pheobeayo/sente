@@ -16,6 +16,8 @@ interface Proposal {
   category: string;
 }
 
+type FilterType = 'all' | 'active' | 'passed' | 'rejected';
+
 const mockProposals: Proposal[] = [
   {
     id: '1',
@@ -68,8 +70,7 @@ const mockProposals: Proposal[] = [
 ];
 
 export default function VotePage() {
-  const [filter, setFilter] = useState<'all' | 'active' | 'passed' | 'rejected'>('all');
-  const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
+  const [filter, setFilter] = useState<FilterType>('all');
   const [votingPower] = useState(25000);
 
   const filteredProposals = mockProposals.filter(p => 
@@ -93,6 +94,8 @@ export default function VotePage() {
       default: return <Vote className="w-4 h-4" />;
     }
   };
+
+  const filterOptions: FilterType[] = ['all', 'active', 'passed', 'rejected'];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
@@ -146,10 +149,10 @@ export default function VotePage() {
 
         {/* Filters */}
         <div className="flex gap-4 mb-8">
-          {['all', 'active', 'passed', 'rejected'].map((f) => (
+          {filterOptions.map((f) => (
             <button
               key={f}
-              onClick={() => setFilter(f as any)}
+              onClick={() => setFilter(f)}
               className={`px-6 py-2 rounded-lg font-medium transition-all ${
                 filter === f
                   ? 'bg-blue-600 text-white'
@@ -171,7 +174,6 @@ export default function VotePage() {
               <div
                 key={proposal.id}
                 className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10 hover:border-purple-500/50 transition-all cursor-pointer"
-                onClick={() => setSelectedProposal(proposal)}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">

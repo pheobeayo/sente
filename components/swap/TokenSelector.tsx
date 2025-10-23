@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, ChevronDown, Star } from 'lucide-react';
+import { Search, Star } from 'lucide-react';
 
 interface Token {
   symbol: string;

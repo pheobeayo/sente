@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowUpRight, ExternalLink, Clock } from 'lucide-react';
 import { useStacksWallet } from '@/hooks/useStacksWallet';
 import { useStacksSwap } from '@/hooks/useStacksSwap';
@@ -23,13 +23,30 @@ export default function RecentTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (isConnected && stxAddress) {
-      loadTransactions();
+  const updateTransactionStatuses = useCallback(async (txs: Transaction[]) => {
+    const updatedTxs: Transaction[] = await Promise.all(
+      txs.map(async (tx) => {
+        if (tx.status === 'pending') {
+          try {
+            const status = await getTransactionStatus(tx.txHash);
+            const newStatus: Transaction['status'] = status && status.confirmed ? 'confirmed' : 'pending';
+            return { ...tx, status: newStatus };
+          } catch {
+            return tx;
+          }
+        }
+        return tx;
+      })
+    );
+    setTransactions(updatedTxs);
+    
+    // Save updated transactions
+    if (stxAddress) {
+      localStorage.setItem(`transactions_${stxAddress}`, JSON.stringify(updatedTxs));
     }
-  }, [isConnected, stxAddress]);
+  }, [stxAddress, getTransactionStatus]);
 
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     setLoading(true);
     try {
       // Load user's recent transactions from local storage or API
@@ -46,30 +63,13 @@ export default function RecentTransactions() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [stxAddress, updateTransactionStatuses]);
 
-  const updateTransactionStatuses = async (txs: Transaction[]) => {
-    const updatedTxs: Transaction[] = await Promise.all(
-      txs.map(async (tx) => {
-        if (tx.status === 'pending') {
-          try {
-            const status = await getTransactionStatus(tx.txHash);
-            const newStatus: Transaction['status'] = status && status.confirmed ? 'confirmed' : 'pending';
-            return { ...tx, status: newStatus };
-          } catch (error) {
-            return tx;
-          }
-        }
-        return tx;
-      })
-    );
-    setTransactions(updatedTxs);
-    
-    // Save updated transactions
-    if (stxAddress) {
-      localStorage.setItem(`transactions_${stxAddress}`, JSON.stringify(updatedTxs));
+  useEffect(() => {
+    if (isConnected && stxAddress) {
+      loadTransactions();
     }
-  };
+  }, [isConnected, stxAddress, loadTransactions]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

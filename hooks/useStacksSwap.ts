@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { openContractCall } from '@stacks/connect';
-import { stacksDexContract } from '@/lib/contract';
 import { useStacksWallet } from './useStacksWallet';
+import { stacksDexContract } from '@/lib/contract';
+import toast from 'react-hot-toast';
 
 interface SwapState {
   isSwapping: boolean;
@@ -18,7 +18,7 @@ interface SwapQuote {
 }
 
 export function useStacksSwap() {
-  const { stxAddress, isConnected, userSession } = useStacksWallet();
+  const { stxAddress, isConnected } = useStacksWallet();
   const [swapState, setSwapState] = useState<SwapState>({
     isSwapping: false,
     error: null,
@@ -43,9 +43,16 @@ export function useStacksSwap() {
         );
         
         // Parse the quote response based on your contract's return format
+        const amountOut = quote.value?.value || 0;
+        
+        // Calculate price impact (simplified)
+        const expectedRate = 1.0; // You should get this from pool reserves
+        const actualRate = amountOut / amountIn;
+        const priceImpact = Math.abs((expectedRate - actualRate) / expectedRate) * 100;
+        
         return {
-          amountOut: quote.value?.value || 0,
-          priceImpact: 0, // Calculate this based on pool reserves
+          amountOut,
+          priceImpact,
           fee: 0.003, // 0.3% fee
         };
       } catch (error: any) {
@@ -72,6 +79,7 @@ export function useStacksSwap() {
           error: 'Please connect your wallet first',
           txId: null,
         });
+        toast.error('Please connect your wallet first');
         return;
       }
 
@@ -82,42 +90,40 @@ export function useStacksSwap() {
       });
 
       try {
-        // Build transaction options
-        const txOptions = await stacksDexContract.swapTokens(
+        await stacksDexContract.swapTokens(
           tokenIn,
           tokenOut,
           amountIn,
           minAmountOut,
-          stxAddress
-        );
-
-        // Open wallet for signing
-        await openContractCall({
-          ...txOptions,
-          onFinish: (data) => {
+          stxAddress,
+          (data: { txId: any; }) => {
             console.log('Swap transaction broadcast:', data);
             setSwapState({
               isSwapping: false,
               error: null,
               txId: data.txId,
             });
+            toast.success('Swap successful!');
           },
-          onCancel: () => {
+          () => {
             console.log('Swap cancelled by user');
             setSwapState({
               isSwapping: false,
-              error: 'Transaction cancelled',
+              error: null,
               txId: null,
             });
-          },
-        });
+            toast('Swap cancelled');
+          }
+        );
       } catch (error: any) {
         console.error('Swap failed:', error);
+        const errorMessage = error.message || 'Swap failed';
         setSwapState({
           isSwapping: false,
-          error: error.message || 'Swap failed',
+          error: errorMessage,
           txId: null,
         });
+        toast.error(errorMessage);
         throw error;
       }
     },

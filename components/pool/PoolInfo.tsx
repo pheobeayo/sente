@@ -22,7 +22,6 @@ export default function PoolInfo({
   apr,
   change24h,
   totalLPs,
-  poolToken,
 }: PoolInfoProps) {
   const isPositive = change24h >= 0;
 

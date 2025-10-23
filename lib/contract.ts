@@ -9,8 +9,10 @@ import {
 } from '@stacks/transactions';
 import { StacksNetwork } from '@stacks/network';
 import { openContractCall } from '@stacks/connect';
-import type { ContractCallRegularOptions } from '@stacks/connect';
+import type { ContractCallRegularOptions, FinishedTxData } from '@stacks/connect';
 import { CONTRACT_ADDRESS, CONTRACT_NAME, NETWORK, API_URL } from './config';
+
+
 
 export class StacksDexContract {
   private network: StacksNetwork;
@@ -101,8 +103,8 @@ export class StacksDexContract {
     amountIn: number,
     minAmountOut: number,
     senderAddress: string,
-    onFinish?: (data: any) => void,
-    onCancel?: () => void
+    onFinish: (data: FinishedTxData) => void,
+    onCancel: () => void
   ) {
     const functionArgs = [
       contractPrincipalCV(CONTRACT_ADDRESS, tokenIn),
@@ -118,12 +120,14 @@ export class StacksDexContract {
       functionArgs,
       network: this.network,
       postConditionMode: PostConditionMode.Allow,
-      onFinish: onFinish || ((data) => {
+      onFinish: (data: FinishedTxData) => {
         console.log('Transaction submitted:', data);
-      }),
-      onCancel: onCancel || (() => {
+        onFinish(data);
+      },
+      onCancel: () => {
         console.log('Transaction cancelled');
-      }),
+        onCancel();
+      },
     };
 
     return openContractCall(txOptions);
@@ -139,8 +143,8 @@ export class StacksDexContract {
     amount1: number,
     minLiquidity: number,
     senderAddress: string,
-    onFinish?: (data: any) => void,
-    onCancel?: () => void
+    onFinish: (data: FinishedTxData) => void,
+    onCancel: () => void
   ) {
     const functionArgs = [
       contractPrincipalCV(CONTRACT_ADDRESS, token0),
@@ -157,12 +161,14 @@ export class StacksDexContract {
       functionArgs,
       network: this.network,
       postConditionMode: PostConditionMode.Allow,
-      onFinish: onFinish || ((data) => {
+      onFinish: (data: FinishedTxData) => {
         console.log('Transaction submitted:', data);
-      }),
-      onCancel: onCancel || (() => {
+        onFinish(data);
+      },
+      onCancel: () => {
         console.log('Transaction cancelled');
-      }),
+        onCancel();
+      },
     };
 
     return openContractCall(txOptions);
@@ -178,8 +184,8 @@ export class StacksDexContract {
     minAmount0: number,
     minAmount1: number,
     senderAddress: string,
-    onFinish?: (data: any) => void,
-    onCancel?: () => void
+    onFinish: (data: FinishedTxData) => void,
+    onCancel: () => void
   ) {
     const functionArgs = [
       contractPrincipalCV(CONTRACT_ADDRESS, token0),
@@ -196,12 +202,14 @@ export class StacksDexContract {
       functionArgs,
       network: this.network,
       postConditionMode: PostConditionMode.Allow,
-      onFinish: onFinish || ((data) => {
+      onFinish: (data: FinishedTxData) => {
         console.log('Transaction submitted:', data);
-      }),
-      onCancel: onCancel || (() => {
+        onFinish(data);
+      },
+      onCancel: () => {
         console.log('Transaction cancelled');
-      }),
+        onCancel();
+      },
     };
 
     return openContractCall(txOptions);

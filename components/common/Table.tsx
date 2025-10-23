@@ -2,19 +2,23 @@
 
 import React from 'react';
 
-interface Column {
+interface Column<T> {
   header: string;
-  accessor: string;
-  cell?: (value: any, row: any) => React.ReactNode;
+  accessor: keyof T;
+  cell?: (value: T[keyof T], row: T) => React.ReactNode;
 }
 
-interface TableProps {
-  columns: Column[];
-  data: any[];
+interface TableProps<T> {
+  columns: Column<T>[];
+  data: T[];
   emptyMessage?: string;
 }
 
-export default function Table({ columns, data, emptyMessage = 'No data available' }: TableProps) {
+export default function Table<T extends Record<string, unknown>>({ 
+  columns, 
+  data, 
+  emptyMessage = 'No data available' 
+}: TableProps<T>) {
   return (
     <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 overflow-hidden">
       <div className="overflow-x-auto">
@@ -48,7 +52,7 @@ export default function Table({ columns, data, emptyMessage = 'No data available
                     <td key={colIndex} className="px-6 py-4 text-white">
                       {column.cell
                         ? column.cell(row[column.accessor], row)
-                        : row[column.accessor]}
+                        : String(row[column.accessor] ?? '')}
                     </td>
                   ))}
                 </tr>

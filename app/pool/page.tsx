@@ -66,20 +66,22 @@ const pools: Pool[] = [
   },
 ];
 
+interface UserLiquidityData {
+  liquidity: number;
+  value: number;
+}
+
 export default function PoolPage() {
   const { isConnected, stxAddress, connectWallet } = useStacksWallet();
-  const { getPoolInfo, getUserLiquidity } = useStacksPool();
+  const { getUserLiquidity } = useStacksPool();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'tvl' | 'volume24h' | 'apr'>('tvl');
-  const [userPools, setUserPools] = useState<Record<string, any>>({});
-  const [loading, setLoading] = useState(false);
+  const [userPools, setUserPools] = useState<Record<string, UserLiquidityData>>({});
 
-  const filteredPools = pools
-    .filter(pool =>
-      pool.pair.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .sort((a, b) => (b[sortBy] as number) - (a[sortBy] as number));
+  const filteredPools = pools.filter(pool =>
+    pool.pair.toLowerCase().includes(searchQuery.toLowerCase())
+  ).sort((a, b) => b[sortBy] - a[sortBy]);
 
   const totalTVL = pools.reduce((sum, pool) => sum + pool.tvl, 0);
   const totalVolume = pools.reduce((sum, pool) => sum + pool.volume24h, 0);
@@ -87,36 +89,36 @@ export default function PoolPage() {
 
   // Load user's liquidity positions
   useEffect(() => {
+    const loadUserLiquidity = async () => {
+      if (!stxAddress) return;
+      
+      try {
+        const liquidityData: Record<string, UserLiquidityData> = {};
+        
+        for (const pool of pools) {
+          try {
+            const userLiq = await getUserLiquidity(pool.token0Address, pool.token1Address);
+            if (userLiq && userLiq.liquidity > 0) {
+              liquidityData[pool.id] = {
+                liquidity: userLiq.liquidity,
+                value: userLiq.value
+              };
+            }
+          } catch (err) {
+            console.error(`Error loading liquidity for ${pool.pair}:`, err);
+          }
+        }
+        
+        setUserPools(liquidityData);
+      } catch (err) {
+        console.error('Error loading user liquidity:', err);
+      }
+    };
+
     if (isConnected && stxAddress) {
       loadUserLiquidity();
     }
-  }, [isConnected, stxAddress]);
-
-  const loadUserLiquidity = async () => {
-    if (!stxAddress) return;
-    
-    setLoading(true);
-    try {
-      const liquidityData: Record<string, any> = {};
-      
-      for (const pool of pools) {
-        try {
-          const userLiq = await getUserLiquidity(pool.token0Address, pool.token1Address);
-          if (userLiq && userLiq.liquidity > 0) {
-            liquidityData[pool.id] = userLiq;
-          }
-        } catch (error) {
-          console.error(`Error loading liquidity for ${pool.pair}:`, error);
-        }
-      }
-      
-      setUserPools(liquidityData);
-    } catch (error) {
-      console.error('Error loading user liquidity:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [isConnected, stxAddress, getUserLiquidity]);
 
   const handleAddLiquidity = () => {
     if (!isConnected) {
@@ -146,29 +148,36 @@ export default function PoolPage() {
         </div>
 
         {/* User's Positions (if connected) */}
-        {isConnected && Object.keys(userPools).length > 0 && (
+        {isConnected && (
           <div className="mb-8 bg-gradient-to-r from-purple-600/20 to-blue-600/20 backdrop-blur-lg rounded-2xl p-6 border border-purple-500/30">
             <h2 className="text-2xl font-bold text-white mb-4">Your Positions</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {Object.entries(userPools).map(([poolId, data]) => {
-                const pool = pools.find(p => p.id === poolId);
-                if (!pool) return null;
-                
-                return (
-                  <div key={poolId} className="bg-white/5 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="flex -space-x-2">
-                        <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full border-2 border-slate-900" />
-                        <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full border-2 border-slate-900" />
+            {Object.keys(userPools).length > 0 ? (
+              <div className="space-y-3">
+                {Object.entries(userPools).map(([poolId, data]) => {
+                  const pool = pools.find(p => p.id === poolId);
+                  if (!pool) return null;
+                  return (
+                    <div key={poolId} className="flex items-center justify-between bg-white/5 rounded-lg p-4">
+                      <div>
+                        <div className="text-white font-bold">{pool.pair}</div>
+                        <div className="text-gray-400 text-sm">Liquidity: {data.liquidity.toFixed(6)}</div>
                       </div>
-                      <span className="text-white font-bold">{pool.pair}</span>
+                      <div className="text-right">
+                        <div className="text-white font-bold">${data.value.toLocaleString()}</div>
+                        <Link 
+                          href={`/pool/${poolId}`}
+                          className="text-purple-400 hover:text-purple-300 text-sm"
+                        >
+                          Manage →
+                        </Link>
+                      </div>
                     </div>
-                    <p className="text-gray-400 text-sm">LP Tokens: {data.liquidity.toFixed(4)}</p>
-                    <p className="text-green-400 text-sm">≈ ${(data.value || 0).toFixed(2)}</p>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-gray-400">Connect your wallet and add liquidity to see your positions here.</p>
+            )}
           </div>
         )}
 
@@ -213,6 +222,7 @@ export default function PoolPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-12 pr-4 py-3 bg-white/5 backdrop-blur-lg border border-white/10 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
           <div className="flex gap-2">
             <button
               onClick={() => setSortBy('tvl')}
@@ -245,7 +255,6 @@ export default function PoolPage() {
               APR
             </button>
           </div>
-          </div>
         </div>
 
         {/* Pools Table */}
@@ -260,7 +269,6 @@ export default function PoolPage() {
                   <th className="text-right text-gray-400 font-medium py-4 px-6">24h Fees</th>
                   <th className="text-right text-gray-400 font-medium py-4 px-6">APR</th>
                   <th className="text-right text-gray-400 font-medium py-4 px-6">24h Change</th>
-                  {isConnected && <th className="text-right text-gray-400 font-medium py-4 px-6">My Position</th>}
                   <th className="text-right text-gray-400 font-medium py-4 px-6"></th>
                 </tr>
               </thead>
@@ -314,17 +322,6 @@ export default function PoolPage() {
                         <span className="font-medium">{Math.abs(pool.change24h)}%</span>
                       </div>
                     </td>
-                    {isConnected && (
-                      <td className="text-right py-4 px-6">
-                        {userPools[pool.id] ? (
-                          <div className="text-purple-400 font-medium">
-                            ${(userPools[pool.id].value || 0).toFixed(2)}
-                          </div>
-                        ) : (
-                          <div className="text-gray-500 text-sm">-</div>
-                        )}
-                      </td>
-                    )}
                     <td className="text-right py-4 px-6">
                       <Link
                         href={`/pool/${pool.id}`}

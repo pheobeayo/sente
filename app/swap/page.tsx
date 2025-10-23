@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Clock, Zap, TrendingUp } from 'lucide-react';
 import SwapInterface from '@/components/swap/SwapInterface';
 import RecentTransactions from '@/components/swap/RecentTransactions';

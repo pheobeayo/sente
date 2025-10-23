@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, TrendingUp, TrendingDown, Plus, Minus, ExternalLink, Copy, Info, AlertCircle } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Plus, Minus, ExternalLink, Copy, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useStacksWallet } from '@/hooks/useStacksWallet';
@@ -48,6 +48,21 @@ const recentTransactions = [
   { type: 'Swap', from: 'STX', to: 'USDC', amount: '5.0 STX', value: '$4.25', time: '15 min ago', hash: '0xmno...345' }
 ];
 
+interface PoolInfo {
+  reserve0: number;
+  reserve1: number;
+  totalSupply: number;
+  totalTransactions?: number;
+}
+
+interface UserLiquidity {
+  liquidity: number;
+  token0Amount?: number;
+  token1Amount?: number;
+  value: number;
+  unclaimedFees?: number;
+}
+
 export default function PoolDetailPage() {
   const { isConnected, stxAddress, connectWallet } = useStacksWallet();
   const { 
@@ -59,43 +74,42 @@ export default function PoolDetailPage() {
     addLiquidity, 
     removeLiquidity,
     calculateLPTokens,
-    calculateTokensFromLP,
-    resetPoolState 
+    calculateTokensFromLP
   } = useStacksPool();
 
   const [activeTab, setActiveTab] = useState<'add' | 'remove'>('add');
   const [amount0, setAmount0] = useState('');
   const [amount1, setAmount1] = useState('');
   const [removePercent, setRemovePercent] = useState(50);
-  const [userLiquidity, setUserLiquidity] = useState<any>(null);
-  const [poolInfo, setPoolInfo] = useState<any>(null);
+  const [userLiquidity, setUserLiquidity] = useState<UserLiquidity | null>(null);
+  const [poolInfo, setPoolInfo] = useState<PoolInfo | null>(null);
   const [loadingData, setLoadingData] = useState(false);
 
   // Load pool and user data
   useEffect(() => {
+    const loadPoolData = async () => {
+      if (!stxAddress) return;
+
+      setLoadingData(true);
+      try {
+        // Load pool information
+        const info = await getPoolInfo(poolData.token0.address, poolData.token1.address);
+        setPoolInfo(info);
+
+        // Load user's liquidity
+        const userLiq = await getUserLiquidity(poolData.token0.address, poolData.token1.address);
+        setUserLiquidity(userLiq);
+      } catch (err) {
+        console.error('Error loading pool data:', err);
+      } finally {
+        setLoadingData(false);
+      }
+    };
+
     if (isConnected && stxAddress) {
       loadPoolData();
     }
-  }, [isConnected, stxAddress]);
-
-  const loadPoolData = async () => {
-    if (!stxAddress) return;
-
-    setLoadingData(true);
-    try {
-      // Load pool information
-      const info = await getPoolInfo(poolData.token0.address, poolData.token1.address);
-      setPoolInfo(info);
-
-      // Load user's liquidity
-      const userLiq = await getUserLiquidity(poolData.token0.address, poolData.token1.address);
-      setUserLiquidity(userLiq);
-    } catch (error) {
-      console.error('Error loading pool data:', error);
-    } finally {
-      setLoadingData(false);
-    }
-  };
+  }, [isConnected, stxAddress, getPoolInfo, getUserLiquidity]);
 
   const handleAddLiquidity = async () => {
     if (!isConnected) {
@@ -131,10 +145,9 @@ export default function PoolDetailPage() {
       if (txId) {
         setAmount0('');
         setAmount1('');
-        setTimeout(() => loadPoolData(), 3000);
       }
-    } catch (error) {
-      console.error('Add liquidity failed:', error);
+    } catch (err) {
+      console.error('Add liquidity failed:', err);
     }
   };
 
@@ -166,13 +179,8 @@ export default function PoolDetailPage() {
         minAmount0,
         minAmount1
       );
-
-      // Reload data after successful transaction
-      if (txId) {
-        setTimeout(() => loadPoolData(), 3000);
-      }
-    } catch (error) {
-      console.error('Remove liquidity failed:', error);
+    } catch (err) {
+      console.error('Remove liquidity failed:', err);
     }
   };
 
@@ -181,7 +189,9 @@ export default function PoolDetailPage() {
   };
 
   const myPosition = userLiquidity?.value || 0;
-  const myShare = poolInfo?.totalSupply > 0 ? (userLiquidity?.liquidity / poolInfo.totalSupply) * 100 : 0;
+  const myShare = poolInfo?.totalSupply && poolInfo.totalSupply > 0 
+    ? (userLiquidity?.liquidity || 0) / poolInfo.totalSupply * 100 
+    : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">

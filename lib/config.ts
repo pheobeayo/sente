@@ -1,4 +1,4 @@
-import { STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
+import { STACKS_TESTNET } from '@stacks/network';
 import { PostConditionMode } from '@stacks/transactions';
 
 // Contract details
@@ -27,21 +27,21 @@ export const CONTRACT_FUNCTIONS = {
   // Swap functions
   SWAP_TOKENS: 'swap-tokens',
   GET_SWAP_QUOTE: 'get-swap-quote',
-  
+ 
   // Liquidity functions
   ADD_LIQUIDITY: 'add-liquidity',
   REMOVE_LIQUIDITY: 'remove-liquidity',
   GET_LIQUIDITY: 'get-liquidity',
-  
+ 
   // Pool functions
   CREATE_POOL: 'create-pool',
   GET_POOL_INFO: 'get-pool-info',
   GET_POOL_RESERVES: 'get-pool-reserves',
-  
+ 
   // Token functions
   GET_BALANCE: 'get-balance',
   TRANSFER: 'transfer',
-};
+} as const;
 
 // Token addresses on Stacks
 export const STACKS_TOKENS = {
@@ -49,15 +49,16 @@ export const STACKS_TOKENS = {
   USDA: `${CONTRACT_ADDRESS}.usda-token`,
   XUSD: `${CONTRACT_ADDRESS}.xusd-token`,
   // Add more tokens as needed
-};
+} as const;
 
 // Transaction settings
 export const TX_OPTIONS = {
   postConditionMode: PostConditionMode.Allow,
   fee: 200000, // Default fee in microSTX (0.2 STX)
-};
+} as const;
 
-export default {
+// Default export for convenience
+const config = {
   CONTRACT_ADDRESS,
   CONTRACT_NAME,
   NETWORK,
@@ -68,3 +69,5 @@ export default {
   STACKS_TOKENS,
   TX_OPTIONS,
 };
+
+export default config;

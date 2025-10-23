@@ -1,15 +1,9 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { openContractCall } from '@stacks/connect';
-import { stacksDexContract } from '@/lib/contract';
+import { useState, useCallback, SetStateAction } from 'react';
 import { useStacksWallet } from './useStacksWallet';
-
-interface PoolState {
-  isLoading: boolean;
-  error: string | null;
-  txId: string | null;
-}
+import { stacksDexContract } from '@/lib/contract';
+import toast from 'react-hot-toast';
 
 interface PoolInfo {
   reserve0: number;
@@ -20,333 +14,211 @@ interface PoolInfo {
 }
 
 interface UserLiquidity {
-  lpTokens: number;
-  share: number;
+  liquidity: number;
   token0Amount: number;
   token1Amount: number;
+  value: number;
+  unclaimedFees: number;
 }
 
 export function useStacksPool() {
-  const { stxAddress, isConnected, userSession } = useStacksWallet();
-  const [poolState, setPoolState] = useState<PoolState>({
-    isLoading: false,
-    error: null,
-    txId: null,
-  });
+  const { stxAddress, isConnected } = useStacksWallet();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [txId, setTxId] = useState<string | null>(null);
 
   /**
    * Get pool information
    */
-  const getPoolInfo = useCallback(
-    async (token0: string, token1: string): Promise<PoolInfo | null> => {
-      if (!stxAddress) {
-        throw new Error('Wallet not connected');
-      }
+  const getPoolInfo = useCallback(async (token0: string, token1: string): Promise<PoolInfo | null> => {
+    if (!stxAddress) {
+      console.error('No wallet connected');
+      return null;
+    }
 
-      try {
-        const poolInfo = await stacksDexContract.getPoolInfo(
-          token0,
-          token1,
-          stxAddress
-        );
-        
-        // Parse the pool info response based on your contract's return format
-        return {
-          reserve0: poolInfo.value?.reserve0?.value || 0,
-          reserve1: poolInfo.value?.reserve1?.value || 0,
-          totalSupply: poolInfo.value?.totalSupply?.value || 0,
-          token0,
-          token1,
-        };
-      } catch (error: any) {
-        console.error('Error getting pool info:', error);
-        throw error;
-      }
-    },
-    [stxAddress]
-  );
+    try {
+      const result = await stacksDexContract.getPoolInfo(token0, token1, stxAddress);
+      
+      // Parse the result based on your contract's response structure
+      return {
+        reserve0: result.value?.reserve0?.value || 0,
+        reserve1: result.value?.reserve1?.value || 0,
+        totalSupply: result.value?.totalSupply?.value || 0,
+        token0,
+        token1,
+      };
+    } catch (error: any) {
+      console.error('Error getting pool info:', error);
+      return null;
+    }
+  }, [stxAddress]);
 
   /**
-   * Get user's liquidity in pool
+   * Get user's liquidity in a pool
    */
-  const getUserLiquidity = useCallback(
-    async (token0: string, token1: string): Promise<UserLiquidity | null> => {
-      if (!stxAddress) {
-        throw new Error('Wallet not connected');
-      }
+  const getUserLiquidity = useCallback(async (token0: string, token1: string): Promise<UserLiquidity | null> => {
+    if (!stxAddress) {
+      console.error('No wallet connected');
+      return null;
+    }
 
-      try {
-        const [liquidity, poolInfo] = await Promise.all([
-          stacksDexContract.getUserLiquidity(token0, token1, stxAddress),
-          stacksDexContract.getPoolInfo(token0, token1, stxAddress),
-        ]);
-
-        const lpTokens = liquidity.value?.value || 0;
-        const totalSupply = poolInfo.value?.totalSupply?.value || 0;
-        const reserve0 = poolInfo.value?.reserve0?.value || 0;
-        const reserve1 = poolInfo.value?.reserve1?.value || 0;
-
-        const share = totalSupply > 0 ? (lpTokens / totalSupply) * 100 : 0;
-        const token0Amount = (lpTokens * reserve0) / totalSupply || 0;
-        const token1Amount = (lpTokens * reserve1) / totalSupply || 0;
-
-        return {
-          lpTokens,
-          share,
-          token0Amount,
-          token1Amount,
-        };
-      } catch (error: any) {
-        console.error('Error getting user liquidity:', error);
-        throw error;
-      }
-    },
-    [stxAddress]
-  );
+    try {
+      const result = await stacksDexContract.getUserLiquidity(token0, token1, stxAddress);
+      
+      // Parse the result based on your contract's response structure
+      const liquidity = result.value?.liquidity?.value || 0;
+      
+      return {
+        liquidity,
+        token0Amount: result.value?.token0Amount?.value || 0,
+        token1Amount: result.value?.token1Amount?.value || 0,
+        value: result.value?.value?.value || 0,
+        unclaimedFees: result.value?.unclaimedFees?.value || 0,
+      };
+    } catch (error: any) {
+      console.error('Error getting user liquidity:', error);
+      return null;
+    }
+  }, [stxAddress]);
 
   /**
-   * Add liquidity to pool
+   * Add liquidity to a pool
    */
-  const addLiquidity = useCallback(
-    async (
-      token0: string,
-      token1: string,
-      amount0: number,
-      amount1: number,
-      minLiquidity: number
-    ) => {
-      if (!stxAddress || !isConnected) {
-        setPoolState({
-          isLoading: false,
-          error: 'Please connect your wallet first',
-          txId: null,
-        });
-        return;
-      }
+  const addLiquidity = useCallback(async (
+    token0: string,
+    token1: string,
+    amount0: number,
+    amount1: number,
+    minLiquidity: number
+  ) => {
+    if (!isConnected || !stxAddress) {
+      toast.error('Please connect your wallet');
+      return;
+    }
 
-      setPoolState({
-        isLoading: true,
-        error: null,
-        txId: null,
-      });
+    setIsLoading(true);
+    setError(null);
+    setTxId(null);
 
-      try {
-        const txOptions = await stacksDexContract.addLiquidity(
-          token0,
-          token1,
-          amount0,
-          amount1,
-          minLiquidity,
-          stxAddress
-        );
-
-        await openContractCall({
-          ...txOptions,
-          onFinish: (data) => {
-            console.log('Add liquidity transaction broadcast:', data);
-            setPoolState({
-              isLoading: false,
-              error: null,
-              txId: data.txId,
-            });
-          },
-          onCancel: () => {
-            console.log('Add liquidity cancelled by user');
-            setPoolState({
-              isLoading: false,
-              error: 'Transaction cancelled',
-              txId: null,
-            });
-          },
-        });
-      } catch (error: any) {
-        console.error('Add liquidity failed:', error);
-        setPoolState({
-          isLoading: false,
-          error: error.message || 'Add liquidity failed',
-          txId: null,
-        });
-        throw error;
-      }
-    },
-    [stxAddress, isConnected]
-  );
+    try {
+      await stacksDexContract.addLiquidity(
+        token0,
+        token1,
+        Math.floor(amount0 * 1000000), // Convert to microunits
+        Math.floor(amount1 * 1000000),
+        Math.floor(minLiquidity * 1000000),
+        stxAddress,
+        (data: { txId: SetStateAction<string | null>; }) => {
+          setTxId(data.txId);
+          setIsLoading(false);
+          toast.success('Liquidity added successfully!');
+        },
+        () => {
+          setIsLoading(false);
+          toast.success('Transaction cancelled');
+        }
+      );
+    } catch (error: any) {
+      setError(error.message || 'Failed to add liquidity');
+      setIsLoading(false);
+      toast.error(error.message || 'Failed to add liquidity');
+    }
+  }, [isConnected, stxAddress]);
 
   /**
-   * Remove liquidity from pool
+   * Remove liquidity from a pool
    */
-  const removeLiquidity = useCallback(
-    async (
-      token0: string,
-      token1: string,
-      liquidity: number,
-      minAmount0: number,
-      minAmount1: number
-    ) => {
-      if (!stxAddress || !isConnected) {
-        setPoolState({
-          isLoading: false,
-          error: 'Please connect your wallet first',
-          txId: null,
-        });
-        return;
-      }
+  const removeLiquidity = useCallback(async (
+    token0: string,
+    token1: string,
+    liquidity: number,
+    minAmount0: number,
+    minAmount1: number
+  ) => {
+    if (!isConnected || !stxAddress) {
+      toast.error('Please connect your wallet');
+      return;
+    }
 
-      setPoolState({
-        isLoading: true,
-        error: null,
-        txId: null,
-      });
+    setIsLoading(true);
+    setError(null);
+    setTxId(null);
 
-      try {
-        const txOptions = await stacksDexContract.removeLiquidity(
-          token0,
-          token1,
-          liquidity,
-          minAmount0,
-          minAmount1,
-          stxAddress
-        );
-
-        await openContractCall({
-          ...txOptions,
-          onFinish: (data) => {
-            console.log('Remove liquidity transaction broadcast:', data);
-            setPoolState({
-              isLoading: false,
-              error: null,
-              txId: data.txId,
-            });
-          },
-          onCancel: () => {
-            console.log('Remove liquidity cancelled by user');
-            setPoolState({
-              isLoading: false,
-              error: 'Transaction cancelled',
-              txId: null,
-            });
-          },
-        });
-      } catch (error: any) {
-        console.error('Remove liquidity failed:', error);
-        setPoolState({
-          isLoading: false,
-          error: error.message || 'Remove liquidity failed',
-          txId: null,
-        });
-        throw error;
-      }
-    },
-    [stxAddress, isConnected]
-  );
+    try {
+      await stacksDexContract.removeLiquidity(
+        token0,
+        token1,
+        Math.floor(liquidity * 1000000), // Convert to microunits
+        Math.floor(minAmount0 * 1000000),
+        Math.floor(minAmount1 * 1000000),
+        stxAddress,
+        (data: { txId: SetStateAction<string | null>; }) => {
+          setTxId(data.txId);
+          setIsLoading(false);
+          toast.success('Liquidity removed successfully!');
+        },
+        () => {
+          setIsLoading(false);
+          toast.success('Transaction cancelled');
+        }
+      );
+    } catch (error: any) {
+      setError(error.message || 'Failed to remove liquidity');
+      setIsLoading(false);
+      toast.error(error.message || 'Failed to remove liquidity');
+    }
+  }, [isConnected, stxAddress]);
 
   /**
-   * Calculate LP tokens to receive
+   * Calculate LP tokens to receive when adding liquidity
    */
-  const calculateLPTokens = useCallback(
-    (
-      amount0: number,
-      amount1: number,
-      reserve0: number,
-      reserve1: number,
-      totalSupply: number
-    ): number => {
-      if (totalSupply === 0) {
-        // First liquidity provision - use geometric mean
-        return Math.floor(Math.sqrt(amount0 * amount1));
-      }
+  const calculateLPTokens = useCallback((
+    amount0: number,
+    amount1: number,
+    reserve0: number,
+    reserve1: number,
+    totalSupply: number
+  ): number => {
+    if (totalSupply === 0) {
+      // First liquidity provider
+      return Math.sqrt(amount0 * amount1);
+    }
 
-      // Subsequent liquidity provisions - use minimum ratio
-      const liquidity0 = (amount0 * totalSupply) / reserve0;
-      const liquidity1 = (amount1 * totalSupply) / reserve1;
-      return Math.floor(Math.min(liquidity0, liquidity1));
-    },
-    []
-  );
+    // Subsequent liquidity providers
+    const liquidity0 = (amount0 * totalSupply) / reserve0;
+    const liquidity1 = (amount1 * totalSupply) / reserve1;
+    
+    return Math.min(liquidity0, liquidity1);
+  }, []);
 
   /**
    * Calculate tokens to receive when removing liquidity
    */
-  const calculateTokensFromLP = useCallback(
-    (
-      lpTokens: number,
-      reserve0: number,
-      reserve1: number,
-      totalSupply: number
-    ): { amount0: number; amount1: number } => {
-      if (totalSupply === 0) {
-        return { amount0: 0, amount1: 0 };
-      }
+  const calculateTokensFromLP = useCallback((
+    liquidity: number,
+    reserve0: number,
+    reserve1: number,
+    totalSupply: number
+  ): { amount0: number; amount1: number } => {
+    if (totalSupply === 0) {
+      return { amount0: 0, amount1: 0 };
+    }
 
-      const amount0 = Math.floor((lpTokens * reserve0) / totalSupply);
-      const amount1 = Math.floor((lpTokens * reserve1) / totalSupply);
-      return { amount0, amount1 };
-    },
-    []
-  );
+    const amount0 = (liquidity * reserve0) / totalSupply;
+    const amount1 = (liquidity * reserve1) / totalSupply;
 
-  /**
-   * Calculate optimal amounts for adding liquidity
-   */
-  const calculateOptimalAmounts = useCallback(
-    (
-      amount0Desired: number,
-      amount1Desired: number,
-      reserve0: number,
-      reserve1: number
-    ): { amount0: number; amount1: number } => {
-      if (reserve0 === 0 || reserve1 === 0) {
-        return { amount0: amount0Desired, amount1: amount1Desired };
-      }
-
-      const amount1Optimal = (amount0Desired * reserve1) / reserve0;
-      
-      if (amount1Optimal <= amount1Desired) {
-        return { amount0: amount0Desired, amount1: Math.floor(amount1Optimal) };
-      }
-
-      const amount0Optimal = (amount1Desired * reserve0) / reserve1;
-      return { amount0: Math.floor(amount0Optimal), amount1: amount1Desired };
-    },
-    []
-  );
-
-  /**
-   * Get transaction status
-   */
-  const getTransactionStatus = useCallback(
-    async (txId: string) => {
-      try {
-        return await stacksDexContract.getTransactionStatus(txId);
-      } catch (error) {
-        console.error('Error fetching transaction status:', error);
-        throw error;
-      }
-    },
-    []
-  );
-
-  /**
-   * Reset pool state
-   */
-  const resetPoolState = useCallback(() => {
-    setPoolState({
-      isLoading: false,
-      error: null,
-      txId: null,
-    });
+    return { amount0, amount1 };
   }, []);
 
   return {
-    ...poolState,
+    isLoading,
+    error,
+    txId,
     getPoolInfo,
     getUserLiquidity,
     addLiquidity,
     removeLiquidity,
     calculateLPTokens,
     calculateTokensFromLP,
-    calculateOptimalAmounts,
-    getTransactionStatus,
-    resetPoolState,
   };
 }

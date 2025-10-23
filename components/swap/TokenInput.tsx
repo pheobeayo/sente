@@ -7,8 +7,9 @@ interface TokenInputProps {
   amount: string;
   balance: string;
   onAmountChange: (value: string) => void;
-  onTokenChange: (token: string) => void;
+  onTokenChange?: (token: string) => void;
   readOnly?: boolean;
+  disabled?: boolean;
 }
 
 export default function TokenInput({
@@ -17,7 +18,6 @@ export default function TokenInput({
   amount,
   balance,
   onAmountChange,
-  onTokenChange,
   readOnly = false
 }: TokenInputProps) {
   return (
