@@ -1,4 +1,5 @@
 import { STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
+import { PostConditionMode } from '@stacks/transactions';
 
 // Contract details
 export const CONTRACT_ADDRESS = 'ST2685JDP18T2355FS34JER4D8MG3Y74XKA7PDQHJ';
@@ -6,7 +7,7 @@ export const CONTRACT_NAME = 'token-dex';
 
 // Network configuration
 export const NETWORK = STACKS_TESTNET;
-// For mainnet, use: export const NETWORK = STACKS_MAINNET;
+// For mainnet, use: export const NETWORK = new StacksMainnet();
 
 // API endpoints
 export const API_URL = 'https://api.testnet.hiro.so';
@@ -52,7 +53,7 @@ export const STACKS_TOKENS = {
 
 // Transaction settings
 export const TX_OPTIONS = {
-  postConditionMode: 0x01, // Allow post conditions
+  postConditionMode: PostConditionMode.Allow,
   fee: 200000, // Default fee in microSTX (0.2 STX)
 };
 

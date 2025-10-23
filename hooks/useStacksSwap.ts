@@ -11,6 +11,12 @@ interface SwapState {
   txId: string | null;
 }
 
+interface SwapQuote {
+  amountOut: number;
+  priceImpact: number;
+  fee: number;
+}
+
 export function useStacksSwap() {
   const { stxAddress, isConnected, userSession } = useStacksWallet();
   const [swapState, setSwapState] = useState<SwapState>({
@@ -23,7 +29,7 @@ export function useStacksSwap() {
    * Get swap quote
    */
   const getQuote = useCallback(
-    async (tokenIn: string, tokenOut: string, amountIn: number) => {
+    async (tokenIn: string, tokenOut: string, amountIn: number): Promise<SwapQuote | null> => {
       if (!stxAddress) {
         throw new Error('Wallet not connected');
       }
@@ -35,7 +41,13 @@ export function useStacksSwap() {
           amountIn,
           stxAddress
         );
-        return quote;
+        
+        // Parse the quote response based on your contract's return format
+        return {
+          amountOut: quote.value?.value || 0,
+          priceImpact: 0, // Calculate this based on pool reserves
+          fee: 0.003, // 0.3% fee
+        };
       } catch (error: any) {
         console.error('Error getting quote:', error);
         throw error;
@@ -116,7 +128,7 @@ export function useStacksSwap() {
    * Calculate price impact
    */
   const calculatePriceImpact = useCallback(
-    (amountIn: number, amountOut: number, reserveIn: number, reserveOut: number) => {
+    (amountIn: number, amountOut: number, reserveIn: number, reserveOut: number): number => {
       if (reserveIn === 0 || reserveOut === 0) return 0;
 
       const spotPrice = reserveOut / reserveIn;
@@ -132,7 +144,7 @@ export function useStacksSwap() {
    * Calculate minimum output with slippage
    */
   const calculateMinOutput = useCallback(
-    (amountOut: number, slippageTolerance: number) => {
+    (amountOut: number, slippageTolerance: number): number => {
       return Math.floor(amountOut * (1 - slippageTolerance / 100));
     },
     []

@@ -11,6 +11,21 @@ interface PoolState {
   txId: string | null;
 }
 
+interface PoolInfo {
+  reserve0: number;
+  reserve1: number;
+  totalSupply: number;
+  token0: string;
+  token1: string;
+}
+
+interface UserLiquidity {
+  lpTokens: number;
+  share: number;
+  token0Amount: number;
+  token1Amount: number;
+}
+
 export function useStacksPool() {
   const { stxAddress, isConnected, userSession } = useStacksWallet();
   const [poolState, setPoolState] = useState<PoolState>({
@@ -23,7 +38,7 @@ export function useStacksPool() {
    * Get pool information
    */
   const getPoolInfo = useCallback(
-    async (token0: string, token1: string) => {
+    async (token0: string, token1: string): Promise<PoolInfo | null> => {
       if (!stxAddress) {
         throw new Error('Wallet not connected');
       }
@@ -34,7 +49,15 @@ export function useStacksPool() {
           token1,
           stxAddress
         );
-        return poolInfo;
+        
+        // Parse the pool info response based on your contract's return format
+        return {
+          reserve0: poolInfo.value?.reserve0?.value || 0,
+          reserve1: poolInfo.value?.reserve1?.value || 0,
+          totalSupply: poolInfo.value?.totalSupply?.value || 0,
+          token0,
+          token1,
+        };
       } catch (error: any) {
         console.error('Error getting pool info:', error);
         throw error;
@@ -47,18 +70,32 @@ export function useStacksPool() {
    * Get user's liquidity in pool
    */
   const getUserLiquidity = useCallback(
-    async (token0: string, token1: string) => {
+    async (token0: string, token1: string): Promise<UserLiquidity | null> => {
       if (!stxAddress) {
         throw new Error('Wallet not connected');
       }
 
       try {
-        const liquidity = await stacksDexContract.getUserLiquidity(
-          token0,
-          token1,
-          stxAddress
-        );
-        return liquidity;
+        const [liquidity, poolInfo] = await Promise.all([
+          stacksDexContract.getUserLiquidity(token0, token1, stxAddress),
+          stacksDexContract.getPoolInfo(token0, token1, stxAddress),
+        ]);
+
+        const lpTokens = liquidity.value?.value || 0;
+        const totalSupply = poolInfo.value?.totalSupply?.value || 0;
+        const reserve0 = poolInfo.value?.reserve0?.value || 0;
+        const reserve1 = poolInfo.value?.reserve1?.value || 0;
+
+        const share = totalSupply > 0 ? (lpTokens / totalSupply) * 100 : 0;
+        const token0Amount = (lpTokens * reserve0) / totalSupply || 0;
+        const token1Amount = (lpTokens * reserve1) / totalSupply || 0;
+
+        return {
+          lpTokens,
+          share,
+          token0Amount,
+          token1Amount,
+        };
       } catch (error: any) {
         console.error('Error getting user liquidity:', error);
         throw error;
@@ -213,16 +250,16 @@ export function useStacksPool() {
       reserve0: number,
       reserve1: number,
       totalSupply: number
-    ) => {
+    ): number => {
       if (totalSupply === 0) {
-        // First liquidity provision
-        return Math.sqrt(amount0 * amount1);
+        // First liquidity provision - use geometric mean
+        return Math.floor(Math.sqrt(amount0 * amount1));
       }
 
-      // Subsequent liquidity provisions
+      // Subsequent liquidity provisions - use minimum ratio
       const liquidity0 = (amount0 * totalSupply) / reserve0;
       const liquidity1 = (amount1 * totalSupply) / reserve1;
-      return Math.min(liquidity0, liquidity1);
+      return Math.floor(Math.min(liquidity0, liquidity1));
     },
     []
   );
@@ -236,10 +273,40 @@ export function useStacksPool() {
       reserve0: number,
       reserve1: number,
       totalSupply: number
-    ) => {
-      const amount0 = (lpTokens * reserve0) / totalSupply;
-      const amount1 = (lpTokens * reserve1) / totalSupply;
+    ): { amount0: number; amount1: number } => {
+      if (totalSupply === 0) {
+        return { amount0: 0, amount1: 0 };
+      }
+
+      const amount0 = Math.floor((lpTokens * reserve0) / totalSupply);
+      const amount1 = Math.floor((lpTokens * reserve1) / totalSupply);
       return { amount0, amount1 };
+    },
+    []
+  );
+
+  /**
+   * Calculate optimal amounts for adding liquidity
+   */
+  const calculateOptimalAmounts = useCallback(
+    (
+      amount0Desired: number,
+      amount1Desired: number,
+      reserve0: number,
+      reserve1: number
+    ): { amount0: number; amount1: number } => {
+      if (reserve0 === 0 || reserve1 === 0) {
+        return { amount0: amount0Desired, amount1: amount1Desired };
+      }
+
+      const amount1Optimal = (amount0Desired * reserve1) / reserve0;
+      
+      if (amount1Optimal <= amount1Desired) {
+        return { amount0: amount0Desired, amount1: Math.floor(amount1Optimal) };
+      }
+
+      const amount0Optimal = (amount1Desired * reserve0) / reserve1;
+      return { amount0: Math.floor(amount0Optimal), amount1: amount1Desired };
     },
     []
   );
@@ -278,6 +345,7 @@ export function useStacksPool() {
     removeLiquidity,
     calculateLPTokens,
     calculateTokensFromLP,
+    calculateOptimalAmounts,
     getTransactionStatus,
     resetPoolState,
   };

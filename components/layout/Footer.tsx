@@ -119,9 +119,7 @@ export default function Footer() {
           <p className="text-gray-400 text-sm">
             © 2025 Sente. All rights reserved.
           </p>
-          <p className="text-gray-400 text-sm">
-            Built with ❤️ by the Sente community
-          </p>
+          
         </div>
       </div>
     </footer>

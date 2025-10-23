@@ -1,18 +1,16 @@
 import {
-  makeContractCall,
-  broadcastTransaction,
-  AnchorMode,
-  PostConditionMode,
   standardPrincipalCV,
   uintCV,
   contractPrincipalCV,
-  bufferCVFromString,
   ClarityValue,
   cvToJSON,
   fetchCallReadOnlyFunction,
+  PostConditionMode,
 } from '@stacks/transactions';
 import { StacksNetwork } from '@stacks/network';
-import { CONTRACT_ADDRESS, CONTRACT_NAME, NETWORK, TX_OPTIONS } from './config';
+import { openContractCall } from '@stacks/connect';
+import type { ContractCallRegularOptions } from '@stacks/connect';
+import { CONTRACT_ADDRESS, CONTRACT_NAME, NETWORK, API_URL } from './config';
 
 export class StacksDexContract {
   private network: StacksNetwork;
@@ -102,7 +100,9 @@ export class StacksDexContract {
     tokenOut: string,
     amountIn: number,
     minAmountOut: number,
-    senderAddress: string
+    senderAddress: string,
+    onFinish?: (data: any) => void,
+    onCancel?: () => void
   ) {
     const functionArgs = [
       contractPrincipalCV(CONTRACT_ADDRESS, tokenIn),
@@ -111,20 +111,22 @@ export class StacksDexContract {
       uintCV(minAmountOut),
     ];
 
-    const txOptions = {
+    const txOptions: ContractCallRegularOptions = {
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'swap-tokens',
       functionArgs,
-      senderKey: '', // Will be signed by wallet
-      validateWithAbi: true,
       network: this.network,
-      anchorMode: AnchorMode.Any,
       postConditionMode: PostConditionMode.Allow,
-      fee: TX_OPTIONS.fee,
+      onFinish: onFinish || ((data) => {
+        console.log('Transaction submitted:', data);
+      }),
+      onCancel: onCancel || (() => {
+        console.log('Transaction cancelled');
+      }),
     };
 
-    return txOptions;
+    return openContractCall(txOptions);
   }
 
   /**
@@ -136,7 +138,9 @@ export class StacksDexContract {
     amount0: number,
     amount1: number,
     minLiquidity: number,
-    senderAddress: string
+    senderAddress: string,
+    onFinish?: (data: any) => void,
+    onCancel?: () => void
   ) {
     const functionArgs = [
       contractPrincipalCV(CONTRACT_ADDRESS, token0),
@@ -146,20 +150,22 @@ export class StacksDexContract {
       uintCV(minLiquidity),
     ];
 
-    const txOptions = {
+    const txOptions: ContractCallRegularOptions = {
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'add-liquidity',
       functionArgs,
-      senderKey: '', // Will be signed by wallet
-      validateWithAbi: true,
       network: this.network,
-      anchorMode: AnchorMode.Any,
       postConditionMode: PostConditionMode.Allow,
-      fee: TX_OPTIONS.fee,
+      onFinish: onFinish || ((data) => {
+        console.log('Transaction submitted:', data);
+      }),
+      onCancel: onCancel || (() => {
+        console.log('Transaction cancelled');
+      }),
     };
 
-    return txOptions;
+    return openContractCall(txOptions);
   }
 
   /**
@@ -171,7 +177,9 @@ export class StacksDexContract {
     liquidity: number,
     minAmount0: number,
     minAmount1: number,
-    senderAddress: string
+    senderAddress: string,
+    onFinish?: (data: any) => void,
+    onCancel?: () => void
   ) {
     const functionArgs = [
       contractPrincipalCV(CONTRACT_ADDRESS, token0),
@@ -181,20 +189,22 @@ export class StacksDexContract {
       uintCV(minAmount1),
     ];
 
-    const txOptions = {
+    const txOptions: ContractCallRegularOptions = {
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'remove-liquidity',
       functionArgs,
-      senderKey: '', // Will be signed by wallet
-      validateWithAbi: true,
       network: this.network,
-      anchorMode: AnchorMode.Any,
       postConditionMode: PostConditionMode.Allow,
-      fee: TX_OPTIONS.fee,
+      onFinish: onFinish || ((data) => {
+        console.log('Transaction submitted:', data);
+      }),
+      onCancel: onCancel || (() => {
+        console.log('Transaction cancelled');
+      }),
     };
 
-    return txOptions;
+    return openContractCall(txOptions);
   }
 
   /**
@@ -205,7 +215,22 @@ export class StacksDexContract {
     
     const functionArgs = [standardPrincipalCV(userAddress)];
 
-    return this.callReadOnly('get-balance', functionArgs, userAddress);
+    try {
+      const options = {
+        contractAddress: contractAddr,
+        contractName: tokenName,
+        functionName: 'get-balance',
+        functionArgs,
+        network: this.network,
+        senderAddress: userAddress,
+      };
+
+      const result = await fetchCallReadOnlyFunction(options);
+      return cvToJSON(result);
+    } catch (error) {
+      console.error('Error fetching token balance:', error);
+      throw error;
+    }
   }
 
   /**
@@ -221,7 +246,7 @@ export class StacksDexContract {
   async getTransactionStatus(txId: string) {
     try {
       const response = await fetch(
-        `${this.network.client.baseUrl}/extended/v1/tx/${txId}`
+        `${API_URL}/extended/v1/tx/${txId}`
       );
       const data = await response.json();
       return data;
