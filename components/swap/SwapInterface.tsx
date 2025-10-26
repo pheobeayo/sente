@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import {
   ArrowDownUp,
   Settings,
@@ -14,19 +15,21 @@ import {
 import { useStacksWallet } from '@/hooks/useStacksWallet';
 import { useStacksSwap } from '@/hooks/useStacksSwap';
 import toast from 'react-hot-toast';
+import stx from "@/public/stx.png";
+import usdc from "@/public/usdc.png";
 
 interface Token {
   symbol: string;
   name: string;
   address: string;
-  icon: string;
+  icon: any;
 }
 
 // Token list
 const TOKENS: Token[] = [
-  { symbol: 'STX', name: 'Stacks', address: 'STX', icon: '🟣' },
-  { symbol: 'USDC', name: 'USD Coin', address: 'SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9.token-usdc', icon: '💵' },
-  { symbol: 'USDA', name: 'USD Arkadiko', address: 'SP2C2YFP12AJZB4MABJBAJ55XECVS7E4PMMZ89YZR.arkadiko-token', icon: '💰' },
+  { symbol: 'STX', name: 'Stacks', address: 'STX', icon: stx },
+  { symbol: 'USDC', name: 'USD Coin', address: 'SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9.token-usdc', icon: usdc },
+  { symbol: 'USDA', name: 'USD Arkadiko', address: 'SP2C2YFP12AJZB4MABJBAJ55XECVS7E4PMMZ89YZR.arkadiko-token', icon: usdc },
 ];
 
 export default function SwapInterface() {
@@ -306,7 +309,16 @@ export default function SwapInterface() {
               onClick={() => setShowFromTokenList(true)}
               className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
             >
-              <span className="text-2xl">{fromToken.icon}</span>
+              <div className="w-6 h-6 relative">
+                <Image 
+                  src={fromToken.icon} 
+                  alt={fromToken.symbol} 
+                  width={24} 
+                  height={24} 
+                  className="rounded-full"
+                  priority
+                />
+              </div>
               <span className="text-white font-bold">{fromToken.symbol}</span>
               <ChevronDown className="w-4 h-4 text-gray-400" />
             </button>
@@ -360,7 +372,16 @@ export default function SwapInterface() {
               onClick={() => setShowToTokenList(true)}
               className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
             >
-              <span className="text-2xl">{toToken.icon}</span>
+              <div className="w-6 h-6 relative">
+                <Image 
+                  src={toToken.icon} 
+                  alt={toToken.symbol} 
+                  width={24} 
+                  height={24} 
+                  className="rounded-full"
+                  priority
+                />
+              </div>
               <span className="text-white font-bold">{toToken.symbol}</span>
               <ChevronDown className="w-4 h-4 text-gray-400" />
             </button>
@@ -456,7 +477,16 @@ export default function SwapInterface() {
                   onClick={() => handleSelectFromToken(token)}
                   className="w-full flex items-center gap-4 p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all"
                 >
-                  <span className="text-3xl">{token.icon}</span>
+                  <div className="w-10 h-10 relative">
+                    <Image 
+                      src={token.icon} 
+                      alt={token.symbol} 
+                      width={40} 
+                      height={40} 
+                      className="rounded-full"
+                      priority
+                    />
+                  </div>
                   <div className="flex-1 text-left">
                     <div className="text-white font-bold">{token.symbol}</div>
                     <div className="text-gray-400 text-sm">{token.name}</div>
@@ -488,7 +518,16 @@ export default function SwapInterface() {
                   onClick={() => handleSelectToToken(token)}
                   className="w-full flex items-center gap-4 p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all"
                 >
-                  <span className="text-3xl">{token.icon}</span>
+                  <div className="w-10 h-10 relative">
+                    <Image 
+                      src={token.icon} 
+                      alt={token.symbol} 
+                      width={40} 
+                      height={40} 
+                      className="rounded-full"
+                      priority
+                    />
+                  </div>
                   <div className="flex-1 text-left">
                     <div className="text-white font-bold">{token.symbol}</div>
                     <div className="text-gray-400 text-sm">{token.name}</div>

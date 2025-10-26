@@ -3,8 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { Search, TrendingUp, TrendingDown, Droplets, DollarSign, Activity, Plus, ArrowRight, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useStacksWallet } from '@/hooks/useStacksWallet';
 import { useStacksPool } from '@/hooks/useStacksPool';
+import stx from "@/public/stx.png";
+import usdc from "@/public/usdc.png";
 
 interface Pool {
   id: string;
@@ -13,6 +16,8 @@ interface Pool {
   token1: string;
   token0Address: string;
   token1Address: string;
+  token0Icon: any;
+  token1Icon: any;
   tvl: number;
   volume24h: number;
   fees24h: number;
@@ -29,6 +34,8 @@ const pools: Pool[] = [
     token1: 'USDC',
     token0Address: 'STX',
     token1Address: 'SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9.token-usdc',
+    token0Icon: stx,
+    token1Icon: usdc,
     tvl: 5200000,
     volume24h: 1800000,
     fees24h: 5400,
@@ -43,6 +50,8 @@ const pools: Pool[] = [
     token1: 'XUSD',
     token0Address: 'STX',
     token1Address: 'SP2C2YFP12AJZB4MABJBAJ55XECVS7E4PMMZ89YZR.xusd-token',
+    token0Icon: stx,
+    token1Icon: usdc,
     tvl: 3800000,
     volume24h: 1200000,
     fees24h: 3600,
@@ -57,6 +66,8 @@ const pools: Pool[] = [
     token1: 'XUSD',
     token0Address: 'SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9.token-usdc',
     token1Address: 'SP2C2YFP12AJZB4MABJBAJ55XECVS7E4PMMZ89YZR.xusd-token',
+    token0Icon: usdc,
+    token1Icon: usdc,
     tvl: 2900000,
     volume24h: 890000,
     fees24h: 2670,
@@ -157,9 +168,33 @@ export default function PoolPage() {
                   if (!pool) return null;
                   return (
                     <div key={poolId} className="flex items-center justify-between bg-white/5 rounded-lg p-4">
-                      <div>
-                        <div className="text-white font-bold">{pool.pair}</div>
-                        <div className="text-gray-400 text-sm">Liquidity: {data.liquidity.toFixed(6)}</div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex -space-x-2">
+                          <div className="w-8 h-8 relative">
+                            <Image 
+                              src={pool.token0Icon} 
+                              alt={pool.token0} 
+                              width={32} 
+                              height={32} 
+                              className="rounded-full border-2 border-slate-900"
+                              priority
+                            />
+                          </div>
+                          <div className="w-8 h-8 relative">
+                            <Image 
+                              src={pool.token1Icon} 
+                              alt={pool.token1} 
+                              width={32} 
+                              height={32} 
+                              className="rounded-full border-2 border-slate-900"
+                              priority
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-white font-bold">{pool.pair}</div>
+                          <div className="text-gray-400 text-sm">Liquidity: {data.liquidity.toFixed(6)}</div>
+                        </div>
                       </div>
                       <div className="text-right">
                         <div className="text-white font-bold">${data.value.toLocaleString()}</div>
@@ -306,8 +341,26 @@ export default function PoolPage() {
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
                         <div className="flex -space-x-2">
-                          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full border-2 border-slate-900" />
-                          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full border-2 border-slate-900" />
+                          <div className="w-8 h-8 relative">
+                            <Image 
+                              src={pool.token0Icon} 
+                              alt={pool.token0} 
+                              width={32} 
+                              height={32} 
+                              className="rounded-full border-2 border-slate-900"
+                              priority
+                            />
+                          </div>
+                          <div className="w-8 h-8 relative">
+                            <Image 
+                              src={pool.token1Icon} 
+                              alt={pool.token1} 
+                              width={32} 
+                              height={32} 
+                              className="rounded-full border-2 border-slate-900"
+                              priority
+                            />
+                          </div>
                         </div>
                         <div>
                           <div className="text-white font-bold">{pool.pair}</div>
