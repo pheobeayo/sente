@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, TrendingUp, TrendingDown, Droplets, DollarSign, Activity, Plus, ArrowRight } from 'lucide-react';
+import { Search, TrendingUp, TrendingDown, Droplets, DollarSign, Activity, Plus, ArrowRight, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useStacksWallet } from '@/hooks/useStacksWallet';
 import { useStacksPool } from '@/hooks/useStacksPool';
@@ -72,12 +72,13 @@ interface UserLiquidityData {
 }
 
 export default function PoolPage() {
-  const { isConnected, stxAddress, connectWallet } = useStacksWallet();
+  const { isConnected, stxAddress } = useStacksWallet();
   const { getUserLiquidity } = useStacksPool();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'tvl' | 'volume24h' | 'apr'>('tvl');
   const [userPools, setUserPools] = useState<Record<string, UserLiquidityData>>({});
+  const [loadingUserData, setLoadingUserData] = useState(false);
 
   const filteredPools = pools.filter(pool =>
     pool.pair.toLowerCase().includes(searchQuery.toLowerCase())
@@ -90,8 +91,9 @@ export default function PoolPage() {
   // Load user's liquidity positions
   useEffect(() => {
     const loadUserLiquidity = async () => {
-      if (!stxAddress) return;
+      if (!stxAddress || !isConnected) return;
       
+      setLoadingUserData(true);
       try {
         const liquidityData: Record<string, UserLiquidityData> = {};
         
@@ -112,6 +114,8 @@ export default function PoolPage() {
         setUserPools(liquidityData);
       } catch (err) {
         console.error('Error loading user liquidity:', err);
+      } finally {
+        setLoadingUserData(false);
       }
     };
 
@@ -119,15 +123,6 @@ export default function PoolPage() {
       loadUserLiquidity();
     }
   }, [isConnected, stxAddress, getUserLiquidity]);
-
-  const handleAddLiquidity = () => {
-    if (!isConnected) {
-      connectWallet();
-    } else {
-      // Navigate to add liquidity page
-      window.location.href = '/pool/add';
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
@@ -138,20 +133,24 @@ export default function PoolPage() {
             <h1 className="text-5xl font-bold text-white mb-4">Liquidity Pools</h1>
             <p className="text-xl text-gray-300">Provide liquidity and earn trading fees</p>
           </div>
-          <button 
-            onClick={handleAddLiquidity}
+          <Link
+            href="/pool/add"
             className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg flex items-center gap-2"
           >
             <Plus className="w-5 h-5" />
-            {isConnected ? 'Add Liquidity' : 'Connect Wallet'}
-          </button>
+            Add Liquidity
+          </Link>
         </div>
 
         {/* User's Positions (if connected) */}
         {isConnected && (
           <div className="mb-8 bg-gradient-to-r from-purple-600/20 to-blue-600/20 backdrop-blur-lg rounded-2xl p-6 border border-purple-500/30">
             <h2 className="text-2xl font-bold text-white mb-4">Your Positions</h2>
-            {Object.keys(userPools).length > 0 ? (
+            {loadingUserData ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-8 h-8 border-4 border-purple-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : Object.keys(userPools).length > 0 ? (
               <div className="space-y-3">
                 {Object.entries(userPools).map(([poolId, data]) => {
                   const pool = pools.find(p => p.id === poolId);
@@ -176,8 +175,34 @@ export default function PoolPage() {
                 })}
               </div>
             ) : (
-              <p className="text-gray-400">Connect your wallet and add liquidity to see your positions here.</p>
+              <div className="text-center py-8">
+                <div className="w-12 h-12 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Droplets className="w-6 h-6 text-purple-400" />
+                </div>
+                <p className="text-gray-400">You don't have any liquidity positions yet.</p>
+                <Link 
+                  href="/pool/add"
+                  className="inline-block mt-3 text-purple-400 hover:text-purple-300 font-medium"
+                >
+                  Add your first position →
+                </Link>
+              </div>
             )}
+          </div>
+        )}
+
+        {/* Not Connected Message */}
+        {!isConnected && (
+          <div className="mb-8 bg-blue-600/10 backdrop-blur-lg rounded-2xl p-6 border border-blue-500/30">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-blue-600/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-6 h-6 text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white mb-2">Connect Your Wallet</h3>
+                <p className="text-gray-300">Connect your wallet to view your liquidity positions and add liquidity to pools.</p>
+              </div>
+            </div>
           </div>
         )}
 

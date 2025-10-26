@@ -3,8 +3,6 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
-import { StacksProvider } from '@/providers/StacksProvider';
-import { AppProvider } from '@/providers/AppProvider';
 import { Toaster } from 'react-hot-toast';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -23,10 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AppProvider>
-          <StacksProvider>
-
-            <div className="flex flex-col min-h-screen">
+        <div className="flex flex-col min-h-screen">
               <Navbar />
               <main className="flex-grow">
                 {children}
@@ -56,8 +51,6 @@ export default function RootLayout({
                 },
               }}
             />
-          </StacksProvider>
-        </AppProvider>
       </body>
     </html>
   );

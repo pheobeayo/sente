@@ -26,7 +26,7 @@ export function useStacksSwap() {
   });
 
   /**
-   * Get swap quote
+   * Get swap quote using real contract functions
    */
   const getQuote = useCallback(
     async (tokenIn: string, tokenOut: string, amountIn: number): Promise<SwapQuote | null> => {
@@ -35,25 +35,56 @@ export function useStacksSwap() {
       }
 
       try {
-        const quote = await stacksDexContract.getSwapQuote(
-          tokenIn,
-          tokenOut,
+        // Get pool information
+        const poolData = await stacksDexContract.getPoolInfo(tokenIn, tokenOut, stxAddress);
+        
+        if (!poolData || !poolData.value) {
+          throw new Error('Pool not found');
+        }
+
+        // Extract reserves - check multiple possible property names
+        const reserveX = Number(
+          poolData.value['reserve-x'] || 
+          poolData.value.reserveX || 
+          poolData.value['reserveA'] ||
+          0
+        );
+        
+        const reserveY = Number(
+          poolData.value['reserve-y'] || 
+          poolData.value.reserveY || 
+          poolData.value['reserveB'] ||
+          0
+        );
+
+        if (reserveX === 0 || reserveY === 0) {
+          throw new Error('Pool has no liquidity');
+        }
+
+        // Calculate output using the contract's constant product formula
+        const amountOut = await stacksDexContract.getSwapOutput(
           amountIn,
+          reserveX,
+          reserveY,
           stxAddress
         );
         
-        // Parse the quote response based on your contract's return format
-        const amountOut = quote.value?.value || 0;
+        // Parse the response
+        const outputAmount = Number(
+          typeof amountOut === 'object' && amountOut !== null 
+            ? (amountOut.value || amountOut)
+            : amountOut
+        );
         
-        // Calculate price impact (simplified)
-        const expectedRate = 1.0; // You should get this from pool reserves
-        const actualRate = amountOut / amountIn;
-        const priceImpact = Math.abs((expectedRate - actualRate) / expectedRate) * 100;
+        // Calculate price impact
+        const spotPrice = reserveY / reserveX;
+        const effectivePrice = outputAmount / amountIn;
+        const priceImpact = Math.abs((spotPrice - effectivePrice) / spotPrice) * 100;
         
         return {
-          amountOut,
-          priceImpact,
-          fee: 0.003, // 0.3% fee
+          amountOut: outputAmount,
+          priceImpact: Math.min(priceImpact, 100), // Cap at 100%
+          fee: 0.003, 
         };
       } catch (error: any) {
         console.error('Error getting quote:', error);
@@ -96,7 +127,7 @@ export function useStacksSwap() {
           amountIn,
           minAmountOut,
           stxAddress,
-          (data: { txId: any; }) => {
+          (data) => {
             console.log('Swap transaction broadcast:', data);
             setSwapState({
               isSwapping: false,

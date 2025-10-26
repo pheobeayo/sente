@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowUpRight, ExternalLink, Clock } from 'lucide-react';
+import { ArrowUpRight, ExternalLink, Clock, AlertCircle } from 'lucide-react';
 import { useStacksWallet } from '@/hooks/useStacksWallet';
 import { useStacksSwap } from '@/hooks/useStacksSwap';
 
@@ -29,7 +29,7 @@ export default function RecentTransactions() {
         if (tx.status === 'pending') {
           try {
             const status = await getTransactionStatus(tx.txHash);
-            const newStatus: Transaction['status'] = status && status.confirmed ? 'confirmed' : 'pending';
+            const newStatus: Transaction['status'] = status && status.tx_status === 'success' ? 'confirmed' : 'pending';
             return { ...tx, status: newStatus };
           } catch {
             return tx;
@@ -40,23 +40,31 @@ export default function RecentTransactions() {
     );
     setTransactions(updatedTxs);
     
-    // Save updated transactions
+    // Save updated transactions to localStorage
     if (stxAddress) {
-      localStorage.setItem(`transactions_${stxAddress}`, JSON.stringify(updatedTxs));
+      try {
+        localStorage.setItem(`transactions_${stxAddress}`, JSON.stringify(updatedTxs));
+      } catch (error) {
+        console.error('Failed to save transactions:', error);
+      }
     }
   }, [stxAddress, getTransactionStatus]);
 
   const loadTransactions = useCallback(async () => {
+    if (!stxAddress) return;
+    
     setLoading(true);
     try {
-      // Load user's recent transactions from local storage or API
       const stored = localStorage.getItem(`transactions_${stxAddress}`);
       if (stored) {
         const txs: Transaction[] = JSON.parse(stored);
         setTransactions(txs);
         
-        // Update transaction statuses
-        await updateTransactionStatuses(txs);
+        // Update transaction statuses for pending transactions
+        const hasPending = txs.some(tx => tx.status === 'pending');
+        if (hasPending) {
+          await updateTransactionStatuses(txs);
+        }
       }
     } catch (error) {
       console.error('Error loading transactions:', error);
@@ -68,6 +76,15 @@ export default function RecentTransactions() {
   useEffect(() => {
     if (isConnected && stxAddress) {
       loadTransactions();
+      
+      // Refresh transaction status every 30 seconds
+      const interval = setInterval(() => {
+        if (transactions.some(tx => tx.status === 'pending')) {
+          updateTransactionStatuses(transactions);
+        }
+      }, 30000);
+      
+      return () => clearInterval(interval);
     }
   }, [isConnected, stxAddress, loadTransactions]);
 
@@ -85,8 +102,7 @@ export default function RecentTransactions() {
   };
 
   const getExplorerUrl = (txHash: string) => {
-    // Use testnet or mainnet based on your configuration
-    return `https://explorer.stacks.co/txid/${txHash}?chain=testnet`;
+    return `https://explorer.hiro.so/txid/${txHash}?chain=testnet`;
   };
 
   if (!isConnected) {
@@ -97,6 +113,9 @@ export default function RecentTransactions() {
           <Clock className="w-5 h-5 text-gray-400" />
         </div>
         <div className="text-center py-8">
+          <div className="w-12 h-12 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-3">
+            <AlertCircle className="w-6 h-6 text-blue-400" />
+          </div>
           <p className="text-gray-400">Connect wallet to view your transactions</p>
         </div>
       </div>
@@ -118,6 +137,9 @@ export default function RecentTransactions() {
       <div className="space-y-3">
         {transactions.length === 0 ? (
           <div className="text-center py-8">
+            <div className="w-12 h-12 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-3">
+              <ArrowUpRight className="w-6 h-6 text-purple-400" />
+            </div>
             <p className="text-gray-400">No recent transactions</p>
             <p className="text-gray-500 text-sm mt-2">Your swaps will appear here</p>
           </div>

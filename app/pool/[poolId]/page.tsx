@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, TrendingUp, TrendingDown, Plus, Minus, ExternalLink, Copy, AlertCircle } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Plus, Minus, ExternalLink, Copy, AlertCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useStacksWallet } from '@/hooks/useStacksWallet';
 import { useStacksPool } from '@/hooks/useStacksPool';
+import toast from 'react-hot-toast';
 
 const poolData = {
   id: '1',
@@ -52,7 +53,6 @@ interface PoolInfo {
   reserve0: number;
   reserve1: number;
   totalSupply: number;
-  totalTransactions?: number;
 }
 
 interface UserLiquidity {
@@ -64,7 +64,7 @@ interface UserLiquidity {
 }
 
 export default function PoolDetailPage() {
-  const { isConnected, stxAddress, connectWallet } = useStacksWallet();
+  const { isConnected, stxAddress } = useStacksWallet();
   const { 
     isLoading, 
     error, 
@@ -94,11 +94,15 @@ export default function PoolDetailPage() {
       try {
         // Load pool information
         const info = await getPoolInfo(poolData.token0.address, poolData.token1.address);
-        setPoolInfo(info);
+        if (info) {
+          setPoolInfo(info);
+        }
 
         // Load user's liquidity
         const userLiq = await getUserLiquidity(poolData.token0.address, poolData.token1.address);
-        setUserLiquidity(userLiq);
+        if (userLiq) {
+          setUserLiquidity(userLiq);
+        }
       } catch (err) {
         console.error('Error loading pool data:', err);
       } finally {
@@ -111,16 +115,39 @@ export default function PoolDetailPage() {
     }
   }, [isConnected, stxAddress, getPoolInfo, getUserLiquidity]);
 
+  // Reload data after successful transaction
+  useEffect(() => {
+    if (txId && stxAddress) {
+      // Wait a bit for transaction to be mined, then reload
+      const timeout = setTimeout(async () => {
+        const info = await getPoolInfo(poolData.token0.address, poolData.token1.address);
+        if (info) setPoolInfo(info);
+        const userLiq = await getUserLiquidity(poolData.token0.address, poolData.token1.address);
+        if (userLiq) setUserLiquidity(userLiq);
+      }, 5000);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [txId, stxAddress, getPoolInfo, getUserLiquidity]);
+
   const handleAddLiquidity = async () => {
     if (!isConnected) {
-      connectWallet();
+      toast.error('Please connect your wallet first');
       return;
     }
 
-    if (!amount0 || !amount1) return;
+    if (!amount0 || !amount1) {
+      toast.error('Please enter amounts for both tokens');
+      return;
+    }
 
     const amount0Num = parseFloat(amount0);
     const amount1Num = parseFloat(amount1);
+
+    if (amount0Num <= 0 || amount1Num <= 0) {
+      toast.error('Amounts must be greater than 0');
+      return;
+    }
 
     // Calculate minimum LP tokens with 0.5% slippage
     const expectedLP = calculateLPTokens(
@@ -132,28 +159,34 @@ export default function PoolDetailPage() {
     );
     const minLP = expectedLP * 0.995;
 
-    try {
-      await addLiquidity(
-        poolData.token0.address,
-        poolData.token1.address,
-        amount0Num,
-        amount1Num,
-        minLP
-      );
+    await addLiquidity(
+      poolData.token0.address,
+      poolData.token1.address,
+      amount0Num,
+      amount1Num,
+      minLP
+    );
 
-      // Reload data after successful transaction
-      if (txId) {
-        setAmount0('');
-        setAmount1('');
-      }
-    } catch (err) {
-      console.error('Add liquidity failed:', err);
+    // Clear inputs on success
+    if (!error) {
+      setAmount0('');
+      setAmount1('');
     }
   };
 
   const handleRemoveLiquidity = async () => {
-    if (!isConnected || !userLiquidity) {
-      connectWallet();
+    if (!isConnected) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    if (!userLiquidity || userLiquidity.liquidity <= 0) {
+      toast.error('No liquidity to remove');
+      return;
+    }
+
+    if (removePercent <= 0) {
+      toast.error('Please select an amount to remove');
       return;
     }
 
@@ -171,27 +204,49 @@ export default function PoolDetailPage() {
     const minAmount0 = expectedAmount0 * 0.995;
     const minAmount1 = expectedAmount1 * 0.995;
 
-    try {
-      await removeLiquidity(
-        poolData.token0.address,
-        poolData.token1.address,
-        liquidityToRemove,
-        minAmount0,
-        minAmount1
-      );
-    } catch (err) {
-      console.error('Remove liquidity failed:', err);
-    }
+    await removeLiquidity(
+      poolData.token0.address,
+      poolData.token1.address,
+      liquidityToRemove,
+      minAmount0,
+      minAmount1
+    );
   };
 
   const copyAddress = () => {
     navigator.clipboard.writeText(poolData.contractAddress);
+    toast.success('Address copied to clipboard');
   };
 
   const myPosition = userLiquidity?.value || 0;
   const myShare = poolInfo?.totalSupply && poolInfo.totalSupply > 0 
     ? (userLiquidity?.liquidity || 0) / poolInfo.totalSupply * 100 
     : 0;
+
+  // Show connection message if not connected
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <Link
+            href="/pool"
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-8 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            Back to Pools
+          </Link>
+
+          <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-12 border border-white/10 text-center">
+            <div className="w-16 h-16 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="w-8 h-8 text-purple-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">Wallet Not Connected</h2>
+            <p className="text-gray-400 mb-6">Connect your wallet to view and manage liquidity</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -220,7 +275,15 @@ export default function PoolDetailPage() {
         {txId && (
           <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
             <p className="text-green-400 font-medium">Transaction Successful!</p>
-            <p className="text-green-300 text-sm mt-1">Transaction ID: {txId}</p>
+            <p className="text-green-300 text-sm mt-1 break-all">Transaction ID: {txId}</p>
+            <a 
+              href={`https://explorer.hiro.so/txid/${txId}?chain=testnet`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-green-400 hover:text-green-300 text-sm mt-2 inline-flex items-center gap-1"
+            >
+              View on Explorer <ExternalLink className="w-3 h-3" />
+            </a>
           </div>
         )}
 
@@ -235,11 +298,16 @@ export default function PoolDetailPage() {
               <div>
                 <h1 className="text-4xl font-bold text-white mb-2">{poolData.pair}</h1>
                 <div className="flex items-center gap-3">
-                  <span className="text-gray-400 font-mono text-sm">{poolData.contractAddress}</span>
+                  <span className="text-gray-400 font-mono text-sm">{poolData.contractAddress.slice(0, 20)}...</span>
                   <button onClick={copyAddress} className="text-gray-400 hover:text-white transition-colors">
                     <Copy className="w-4 h-4" />
                   </button>
-                  <a href="#" className="text-gray-400 hover:text-white transition-colors">
+                  <a 
+                    href={`https://explorer.hiro.so/address/${poolData.contractAddress}?chain=testnet`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-gray-400 hover:text-white transition-colors"
+                  >
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 </div>
@@ -247,31 +315,20 @@ export default function PoolDetailPage() {
             </div>
 
             <div className="flex gap-3">
-              {isConnected ? (
-                <>
-                  <button 
-                    onClick={() => setActiveTab('add')}
-                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2"
-                  >
-                    <Plus className="w-5 h-5" />
-                    Add Liquidity
-                  </button>
-                  <button 
-                    onClick={() => setActiveTab('remove')}
-                    className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold transition-all border border-white/20 flex items-center gap-2"
-                  >
-                    <Minus className="w-5 h-5" />
-                    Remove
-                  </button>
-                </>
-              ) : (
-                <button 
-                  onClick={connectWallet}
-                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-bold transition-all"
-                >
-                  Connect Wallet
-                </button>
-              )}
+              <button 
+                onClick={() => setActiveTab('add')}
+                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Add Liquidity
+              </button>
+              <button 
+                onClick={() => setActiveTab('remove')}
+                className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold transition-all border border-white/20 flex items-center gap-2"
+              >
+                <Minus className="w-5 h-5" />
+                Remove
+              </button>
             </div>
           </div>
         </div>
@@ -326,7 +383,9 @@ export default function PoolDetailPage() {
                     <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full" />
                     <div>
                       <div className="text-white font-bold">{poolData.token0.symbol}</div>
-                      <div className="text-gray-400 text-sm">{poolInfo?.reserve0 || poolData.token0.amount.toLocaleString()}</div>
+                      <div className="text-gray-400 text-sm">
+                        {loadingData ? '...' : (poolInfo?.reserve0 || poolData.token0.amount).toLocaleString()}
+                      </div>
                     </div>
                   </div>
                   <div className="text-right">
@@ -340,7 +399,9 @@ export default function PoolDetailPage() {
                     <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full" />
                     <div>
                       <div className="text-white font-bold">{poolData.token1.symbol}</div>
-                      <div className="text-gray-400 text-sm">{poolInfo?.reserve1 || poolData.token1.amount.toLocaleString()}</div>
+                      <div className="text-gray-400 text-sm">
+                        {loadingData ? '...' : (poolInfo?.reserve1 || poolData.token1.amount).toLocaleString()}
+                      </div>
                     </div>
                   </div>
                   <div className="text-right">
@@ -361,10 +422,10 @@ export default function PoolDetailPage() {
                     <LineChart data={liquidityHistory}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                       <XAxis dataKey="date" stroke="#9ca3af" />
-                      <YAxis stroke="#9ca3af" tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
+                      <YAxis stroke="#9ca3af" tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`} />
                       <Tooltip
                         contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                        formatter={(value: number) => [`$${(value / 1000000).toFixed(2)}M`, 'TVL']}
+                        formatter={(value: number) => [`${(value / 1000000).toFixed(2)}M`, 'TVL']}
                       />
                       <Line type="monotone" dataKey="tvl" stroke="#8b5cf6" strokeWidth={3} dot={{ fill: '#8b5cf6', r: 4 }} />
                     </LineChart>
@@ -377,10 +438,10 @@ export default function PoolDetailPage() {
                     <LineChart data={volumeHistory}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                       <XAxis dataKey="date" stroke="#9ca3af" />
-                      <YAxis stroke="#9ca3af" tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
+                      <YAxis stroke="#9ca3af" tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`} />
                       <Tooltip
                         contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                        formatter={(value: number) => [`$${(value / 1000000).toFixed(2)}M`, 'Volume']}
+                        formatter={(value: number) => [`${(value / 1000000).toFixed(2)}M`, 'Volume']}
                       />
                       <Line type="monotone" dataKey="volume" stroke="#06b6d4" strokeWidth={3} dot={{ fill: '#06b6d4', r: 4 }} />
                     </LineChart>
@@ -437,20 +498,24 @@ export default function PoolDetailPage() {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* My Liquidity */}
-            {isConnected && (
-              <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
-                <h3 className="text-xl font-bold text-white mb-4">My Liquidity</h3>
+            <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
+              <h3 className="text-xl font-bold text-white mb-4">My Liquidity</h3>
+              {loadingData ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+                </div>
+              ) : (
                 <div className="space-y-4">
                   <div>
                     <div className="text-gray-400 text-sm mb-1">My Position</div>
                     <div className="text-2xl font-bold text-white">
-                      {loadingData ? '...' : `$${myPosition.toLocaleString()}`}
+                      ${myPosition.toLocaleString()}
                     </div>
                   </div>
                   <div>
                     <div className="text-gray-400 text-sm mb-1">Pool Share</div>
                     <div className="text-xl font-bold text-purple-400">
-                      {loadingData ? '...' : `${myShare.toFixed(2)}%`}
+                      {myShare.toFixed(2)}%
                     </div>
                   </div>
                   {userLiquidity && userLiquidity.liquidity > 0 && (
@@ -475,8 +540,8 @@ export default function PoolDetailPage() {
                     </>
                   )}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Add/Remove Liquidity */}
             <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
@@ -514,7 +579,7 @@ export default function PoolDetailPage() {
                       value={amount0}
                       onChange={(e) => setAmount0(e.target.value)}
                       placeholder="0.0"
-                      disabled={!isConnected || isLoading}
+                      disabled={isLoading}
                       className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
                     />
                   </div>
@@ -527,7 +592,7 @@ export default function PoolDetailPage() {
                       value={amount1}
                       onChange={(e) => setAmount1(e.target.value)}
                       placeholder="0.0"
-                      disabled={!isConnected || isLoading}
+                      disabled={isLoading}
                       className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
                     />
                   </div>
@@ -547,10 +612,15 @@ export default function PoolDetailPage() {
                   )}
                   <button 
                     onClick={handleAddLiquidity}
-                    disabled={!isConnected || isLoading || !amount0 || !amount1}
-                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-3 rounded-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isLoading || !amount0 || !amount1}
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-3 rounded-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    {!isConnected ? 'Connect Wallet' : isLoading ? 'Processing...' : 'Add Liquidity'}
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Processing...
+                      </>
+                    ) : 'Add Liquidity'}
                   </button>
                 </div>
               ) : (
@@ -563,7 +633,7 @@ export default function PoolDetailPage() {
                       max="100"
                       value={removePercent}
                       onChange={(e) => setRemovePercent(parseInt(e.target.value))}
-                      disabled={!isConnected || isLoading || !userLiquidity?.liquidity}
+                      disabled={isLoading || !userLiquidity?.liquidity}
                       className="w-full disabled:opacity-50"
                     />
                     <div className="flex justify-between mt-2">
@@ -604,10 +674,15 @@ export default function PoolDetailPage() {
                   )}
                   <button 
                     onClick={handleRemoveLiquidity}
-                    disabled={!isConnected || isLoading || !userLiquidity?.liquidity || removePercent === 0}
-                    className="w-full bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white py-3 rounded-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isLoading || !userLiquidity?.liquidity || removePercent === 0}
+                    className="w-full bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white py-3 rounded-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    {!isConnected ? 'Connect Wallet' : isLoading ? 'Processing...' : !userLiquidity?.liquidity ? 'No Liquidity' : 'Remove Liquidity'}
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Processing...
+                      </>
+                    ) : !userLiquidity?.liquidity ? 'No Liquidity' : 'Remove Liquidity'}
                   </button>
                 </div>
               )}
@@ -623,7 +698,7 @@ export default function PoolDetailPage() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">Total Transactions</span>
-                  <span className="text-white font-medium">{poolInfo?.totalTransactions || '12,458'}</span>
+                  <span className="text-white font-medium">12,458</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">7d Volume</span>
@@ -635,7 +710,9 @@ export default function PoolDetailPage() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">Total LP Tokens</span>
-                  <span className="text-white font-medium">{poolInfo?.totalSupply?.toFixed(2) || '0.00'}</span>
+                  <span className="text-white font-medium">
+                    {loadingData ? '...' : poolInfo?.totalSupply?.toFixed(2) || '0.00'}
+                  </span>
                 </div>
               </div>
             </div>

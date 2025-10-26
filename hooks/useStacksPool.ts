@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, SetStateAction } from 'react';
+import { useState, useCallback } from 'react';
 import { useStacksWallet } from './useStacksWallet';
 import { stacksDexContract } from '@/lib/contract';
 import toast from 'react-hot-toast';
@@ -28,7 +28,7 @@ export function useStacksPool() {
   const [txId, setTxId] = useState<string | null>(null);
 
   /**
-   * Get pool information
+   * Get pool information using get-pool
    */
   const getPoolInfo = useCallback(async (token0: string, token1: string): Promise<PoolInfo | null> => {
     if (!stxAddress) {
@@ -39,11 +39,17 @@ export function useStacksPool() {
     try {
       const result = await stacksDexContract.getPoolInfo(token0, token1, stxAddress);
       
-      // Parse the result based on your contract's response structure
+      if (!result || !result.value) {
+        console.error('Pool not found');
+        return null;
+      }
+      
+      const poolData = result.value;
+      
       return {
-        reserve0: result.value?.reserve0?.value || 0,
-        reserve1: result.value?.reserve1?.value || 0,
-        totalSupply: result.value?.totalSupply?.value || 0,
+        reserve0: Number(poolData['reserve-x'] || poolData.reserveX || 0),
+        reserve1: Number(poolData['reserve-y'] || poolData.reserveY || 0),
+        totalSupply: Number(poolData['shares-total'] || poolData.totalShares || 0),
         token0,
         token1,
       };
@@ -54,7 +60,7 @@ export function useStacksPool() {
   }, [stxAddress]);
 
   /**
-   * Get user's liquidity in a pool
+   * Get user's liquidity in a pool using get-user-shares
    */
   const getUserLiquidity = useCallback(async (token0: string, token1: string): Promise<UserLiquidity | null> => {
     if (!stxAddress) {
@@ -63,17 +69,46 @@ export function useStacksPool() {
     }
 
     try {
-      const result = await stacksDexContract.getUserLiquidity(token0, token1, stxAddress);
+      const [sharesResult, poolInfo] = await Promise.all([
+        stacksDexContract.getUserShares(token0, token1, stxAddress),
+        stacksDexContract.getPoolInfo(token0, token1, stxAddress)
+      ]);
       
-      // Parse the result based on your contract's response structure
-      const liquidity = result.value?.liquidity?.value || 0;
+      const shares = Number(
+        typeof sharesResult === 'object' && sharesResult !== null
+          ? (sharesResult.value || sharesResult)
+          : sharesResult || 0
+      );
+
+      if (!poolInfo || !poolInfo.value) {
+        return {
+          liquidity: 0,
+          token0Amount: 0,
+          token1Amount: 0,
+          value: 0,
+          unclaimedFees: 0,
+        };
+      }
+
+      const poolData = poolInfo.value;
+      const reserveX = Number(poolData['reserve-x'] || poolData.reserveX || 0);
+      const reserveY = Number(poolData['reserve-y'] || poolData.reserveY || 0);
+      const totalShares = Number(poolData['shares-total'] || poolData.totalShares || 1);
+
+      // Calculate user's token amounts based on their share
+      const sharePercentage = totalShares > 0 ? shares / totalShares : 0;
+      const token0Amount = sharePercentage * reserveX;
+      const token1Amount = sharePercentage * reserveY;
+      
+      // Calculate approximate value (assuming $0.85 per STX and $1 per stablecoin)
+      const value = (token0Amount * 0.85) + token1Amount;
       
       return {
-        liquidity,
-        token0Amount: result.value?.token0Amount?.value || 0,
-        token1Amount: result.value?.token1Amount?.value || 0,
-        value: result.value?.value?.value || 0,
-        unclaimedFees: result.value?.unclaimedFees?.value || 0,
+        liquidity: shares,
+        token0Amount,
+        token1Amount,
+        value,
+        unclaimedFees: 0, 
       };
     } catch (error: any) {
       console.error('Error getting user liquidity:', error);
@@ -108,14 +143,14 @@ export function useStacksPool() {
         Math.floor(amount1 * 1000000),
         Math.floor(minLiquidity * 1000000),
         stxAddress,
-        (data: { txId: SetStateAction<string | null>; }) => {
+        (data) => {
           setTxId(data.txId);
           setIsLoading(false);
           toast.success('Liquidity added successfully!');
         },
         () => {
           setIsLoading(false);
-          toast.success('Transaction cancelled');
+          toast('Transaction cancelled');
         }
       );
     } catch (error: any) {
@@ -152,14 +187,14 @@ export function useStacksPool() {
         Math.floor(minAmount0 * 1000000),
         Math.floor(minAmount1 * 1000000),
         stxAddress,
-        (data: { txId: SetStateAction<string | null>; }) => {
+        (data) => {
           setTxId(data.txId);
           setIsLoading(false);
           toast.success('Liquidity removed successfully!');
         },
         () => {
           setIsLoading(false);
-          toast.success('Transaction cancelled');
+          toast('Transaction cancelled');
         }
       );
     } catch (error: any) {

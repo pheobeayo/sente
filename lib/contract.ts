@@ -1,26 +1,17 @@
 import {
+  fetchCallReadOnlyFunction,
+  cvToValue,
   standardPrincipalCV,
   uintCV,
   contractPrincipalCV,
   ClarityValue,
-  cvToJSON,
-  fetchCallReadOnlyFunction,
   PostConditionMode,
 } from '@stacks/transactions';
-import { StacksNetwork } from '@stacks/network';
 import { openContractCall } from '@stacks/connect';
-import type { ContractCallRegularOptions, FinishedTxData } from '@stacks/connect';
+import type { ContractCallOptions } from '@stacks/connect';
 import { CONTRACT_ADDRESS, CONTRACT_NAME, NETWORK, API_URL } from './config';
 
-
-
 export class StacksDexContract {
-  private network: StacksNetwork;
-
-  constructor() {
-    this.network = NETWORK;
-  }
-
   /**
    * Call a read-only contract function
    */
@@ -30,37 +21,72 @@ export class StacksDexContract {
     senderAddress: string
   ) {
     try {
-      const options = {
+      const result = await fetchCallReadOnlyFunction({
         contractAddress: CONTRACT_ADDRESS,
         contractName: CONTRACT_NAME,
         functionName,
         functionArgs,
-        network: this.network,
+        network: NETWORK,
         senderAddress,
-      };
+      });
 
-      const result = await fetchCallReadOnlyFunction(options);
-      return cvToJSON(result);
+      return cvToValue(result);
     } catch (error) {
-      console.error('Error calling read-only function:', error);
+      console.error(`Error calling ${functionName}:`, error);
       throw error;
     }
   }
 
   /**
-   * Get pool information
+   * Get pool information using get-pool function
    */
-  async getPoolInfo(token0: string, token1: string, senderAddress: string) {
+  async getPoolInfo(tokenX: string, tokenY: string, senderAddress: string) {
     const functionArgs = [
-      contractPrincipalCV(CONTRACT_ADDRESS, token0),
-      contractPrincipalCV(CONTRACT_ADDRESS, token1),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
     ];
 
-    return this.callReadOnly('get-pool-info', functionArgs, senderAddress);
+    return this.callReadOnly('get-pool', functionArgs, senderAddress);
   }
 
   /**
-   * Get swap quote
+   * Get swap output using constant product formula
+   * Parameters: amount-in (uint), reserve-in (uint), reserve-out (uint)
+   */
+  async getSwapOutput(
+    amountIn: number,
+    reserveIn: number,
+    reserveOut: number,
+    senderAddress: string
+  ) {
+    const functionArgs = [
+      uintCV(amountIn),
+      uintCV(reserveIn),
+      uintCV(reserveOut),
+    ];
+
+    return this.callReadOnly('get-swap-output', functionArgs, senderAddress);
+  }
+
+  /**
+   * Get user's shares/liquidity in a pool
+   */
+  async getUserShares(
+    tokenX: string,
+    tokenY: string,
+    userAddress: string
+  ) {
+    const functionArgs = [
+      standardPrincipalCV(userAddress),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
+    ];
+
+    return this.callReadOnly('get-user-shares', functionArgs, userAddress);
+  }
+
+  /**
+   * Get swap quote by fetching pool info and calculating output
    */
   async getSwapQuote(
     tokenIn: string,
@@ -68,61 +94,67 @@ export class StacksDexContract {
     amountIn: number,
     senderAddress: string
   ) {
-    const functionArgs = [
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenIn),
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenOut),
-      uintCV(amountIn),
-    ];
+    try {
+      // Get pool information
+      const poolData = await this.getPoolInfo(tokenIn, tokenOut, senderAddress);
+      
+      if (!poolData || !poolData.value) {
+        throw new Error('Pool not found');
+      }
 
-    return this.callReadOnly('get-swap-quote', functionArgs, senderAddress);
+      // Extract reserves from pool data
+      // Structure might be: { reserve-x: uint, reserve-y: uint, shares-total: uint }
+      const reserveX = Number(poolData.value['reserve-x'] || poolData.value.reserveX || 0);
+      const reserveY = Number(poolData.value['reserve-y'] || poolData.value.reserveY || 0);
+
+      if (reserveX === 0 || reserveY === 0) {
+        throw new Error('Pool has no liquidity');
+      }
+
+      // Calculate output using the contract's formula
+      const output = await this.getSwapOutput(
+        amountIn,
+        reserveX, // reserve-in
+        reserveY, // reserve-out
+        senderAddress
+      );
+
+      return output;
+    } catch (error) {
+      console.error('Error getting swap quote:', error);
+      throw error;
+    }
   }
 
   /**
-   * Get user's liquidity in a pool
+   * Swap token X for token Y
    */
-  async getUserLiquidity(
-    token0: string,
-    token1: string,
-    userAddress: string
-  ) {
-    const functionArgs = [
-      standardPrincipalCV(userAddress),
-      contractPrincipalCV(CONTRACT_ADDRESS, token0),
-      contractPrincipalCV(CONTRACT_ADDRESS, token1),
-    ];
-
-    return this.callReadOnly('get-liquidity', functionArgs, userAddress);
-  }
-
-  /**
-   * Swap tokens
-   */
-  async swapTokens(
-    tokenIn: string,
-    tokenOut: string,
+  async swapXForY(
+    tokenX: string,
+    tokenY: string,
     amountIn: number,
     minAmountOut: number,
     senderAddress: string,
-    onFinish: (data: FinishedTxData) => void,
+    onFinish: (data: { txId: string }) => void,
     onCancel: () => void
   ) {
     const functionArgs = [
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenIn),
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenOut),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
       uintCV(amountIn),
       uintCV(minAmountOut),
     ];
 
-    const txOptions: ContractCallRegularOptions = {
+    const txOptions: ContractCallOptions = {
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
-      functionName: 'swap-tokens',
+      functionName: 'swap-x-for-y',
       functionArgs,
-      network: this.network,
+      network: NETWORK,
       postConditionMode: PostConditionMode.Allow,
-      onFinish: (data: FinishedTxData) => {
+      onFinish: (data) => {
         console.log('Transaction submitted:', data);
-        onFinish(data);
+        onFinish({ txId: data.txId });
       },
       onCancel: () => {
         console.log('Transaction cancelled');
@@ -134,36 +166,101 @@ export class StacksDexContract {
   }
 
   /**
-   * Add liquidity to a pool
+   * Swap token Y for token X
    */
-  async addLiquidity(
-    token0: string,
-    token1: string,
-    amount0: number,
-    amount1: number,
-    minLiquidity: number,
+  async swapYForX(
+    tokenX: string,
+    tokenY: string,
+    amountIn: number,
+    minAmountOut: number,
     senderAddress: string,
-    onFinish: (data: FinishedTxData) => void,
+    onFinish: (data: { txId: string }) => void,
     onCancel: () => void
   ) {
     const functionArgs = [
-      contractPrincipalCV(CONTRACT_ADDRESS, token0),
-      contractPrincipalCV(CONTRACT_ADDRESS, token1),
-      uintCV(amount0),
-      uintCV(amount1),
-      uintCV(minLiquidity),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
+      uintCV(amountIn),
+      uintCV(minAmountOut),
     ];
 
-    const txOptions: ContractCallRegularOptions = {
+    const txOptions: ContractCallOptions = {
+      contractAddress: CONTRACT_ADDRESS,
+      contractName: CONTRACT_NAME,
+      functionName: 'swap-y-for-x',
+      functionArgs,
+      network: NETWORK,
+      postConditionMode: PostConditionMode.Allow,
+      onFinish: (data) => {
+        console.log('Transaction submitted:', data);
+        onFinish({ txId: data.txId });
+      },
+      onCancel: () => {
+        console.log('Transaction cancelled');
+        onCancel();
+      },
+    };
+
+    return openContractCall(txOptions);
+  }
+
+  /**
+   * Smart swap function that determines direction and calls appropriate function
+   */
+  async swapTokens(
+    tokenIn: string,
+    tokenOut: string,
+    amountIn: number,
+    minAmountOut: number,
+    senderAddress: string,
+    onFinish: (data: { txId: string }) => void,
+    onCancel: () => void
+  ) {
+    // Determine swap direction
+    // Assuming tokenIn is X and tokenOut is Y for swap-x-for-y
+    // You might need to adjust this logic based on your token ordering
+    return this.swapXForY(
+      tokenIn,
+      tokenOut,
+      amountIn,
+      minAmountOut,
+      senderAddress,
+      onFinish,
+      onCancel
+    );
+  }
+
+  /**
+   * Add liquidity to a pool
+   */
+  async addLiquidity(
+    tokenX: string,
+    tokenY: string,
+    amountX: number,
+    amountY: number,
+    minShares: number,
+    senderAddress: string,
+    onFinish: (data: { txId: string }) => void,
+    onCancel: () => void
+  ) {
+    const functionArgs = [
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
+      uintCV(amountX),
+      uintCV(amountY),
+      uintCV(minShares),
+    ];
+
+    const txOptions: ContractCallOptions = {
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'add-liquidity',
       functionArgs,
-      network: this.network,
+      network: NETWORK,
       postConditionMode: PostConditionMode.Allow,
-      onFinish: (data: FinishedTxData) => {
+      onFinish: (data) => {
         console.log('Transaction submitted:', data);
-        onFinish(data);
+        onFinish({ txId: data.txId });
       },
       onCancel: () => {
         console.log('Transaction cancelled');
@@ -178,33 +275,33 @@ export class StacksDexContract {
    * Remove liquidity from a pool
    */
   async removeLiquidity(
-    token0: string,
-    token1: string,
-    liquidity: number,
-    minAmount0: number,
-    minAmount1: number,
+    tokenX: string,
+    tokenY: string,
+    shares: number,
+    minAmountX: number,
+    minAmountY: number,
     senderAddress: string,
-    onFinish: (data: FinishedTxData) => void,
+    onFinish: (data: { txId: string }) => void,
     onCancel: () => void
   ) {
     const functionArgs = [
-      contractPrincipalCV(CONTRACT_ADDRESS, token0),
-      contractPrincipalCV(CONTRACT_ADDRESS, token1),
-      uintCV(liquidity),
-      uintCV(minAmount0),
-      uintCV(minAmount1),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
+      uintCV(shares),
+      uintCV(minAmountX),
+      uintCV(minAmountY),
     ];
 
-    const txOptions: ContractCallRegularOptions = {
+    const txOptions: ContractCallOptions = {
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'remove-liquidity',
       functionArgs,
-      network: this.network,
+      network: NETWORK,
       postConditionMode: PostConditionMode.Allow,
-      onFinish: (data: FinishedTxData) => {
+      onFinish: (data) => {
         console.log('Transaction submitted:', data);
-        onFinish(data);
+        onFinish({ txId: data.txId });
       },
       onCancel: () => {
         console.log('Transaction cancelled');
@@ -224,28 +321,20 @@ export class StacksDexContract {
     const functionArgs = [standardPrincipalCV(userAddress)];
 
     try {
-      const options = {
+      const result = await fetchCallReadOnlyFunction({
         contractAddress: contractAddr,
         contractName: tokenName,
         functionName: 'get-balance',
         functionArgs,
-        network: this.network,
+        network: NETWORK,
         senderAddress: userAddress,
-      };
+      });
 
-      const result = await fetchCallReadOnlyFunction(options);
-      return cvToJSON(result);
+      return cvToValue(result);
     } catch (error) {
       console.error('Error fetching token balance:', error);
-      throw error;
+      return 0;
     }
-  }
-
-  /**
-   * Format transaction for display
-   */
-  formatTransaction(txId: string): string {
-    return `${CONTRACT_ADDRESS}.${CONTRACT_NAME}::${txId}`;
   }
 
   /**
