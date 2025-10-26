@@ -8,6 +8,7 @@ import { useStacksWallet } from '@/hooks/useStacksWallet';
 import { useStacksPool } from '@/hooks/useStacksPool';
 import stx from "@/public/stx.png";
 import usdc from "@/public/usdc.png";
+import { StaticImageData } from 'next/image';
 
 interface Pool {
   id: string;
@@ -16,8 +17,8 @@ interface Pool {
   token1: string;
   token0Address: string;
   token1Address: string;
-  token0Icon: any;
-  token1Icon: any;
+  token0Icon: StaticImageData;
+  token1Icon: StaticImageData;
   tvl: number;
   volume24h: number;
   fees24h: number;
@@ -214,7 +215,7 @@ export default function PoolPage() {
                 <div className="w-12 h-12 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-3">
                   <Droplets className="w-6 h-6 text-purple-400" />
                 </div>
-                <p className="text-gray-400">You don't have any liquidity positions yet.</p>
+                <p className="text-gray-400">You don&apos;t have any liquidity positions yet.</p>
                 <Link 
                   href="/pool/add"
                   className="inline-block mt-3 text-purple-400 hover:text-purple-300 font-medium"

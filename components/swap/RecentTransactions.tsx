@@ -76,17 +76,22 @@ export default function RecentTransactions() {
   useEffect(() => {
     if (isConnected && stxAddress) {
       loadTransactions();
-      
-      // Refresh transaction status every 30 seconds
-      const interval = setInterval(() => {
-        if (transactions.some(tx => tx.status === 'pending')) {
-          updateTransactionStatuses(transactions);
-        }
-      }, 30000);
-      
-      return () => clearInterval(interval);
     }
   }, [isConnected, stxAddress, loadTransactions]);
+
+  // Separate useEffect for the polling interval
+  useEffect(() => {
+    if (!isConnected || !stxAddress) return;
+    
+    // Refresh transaction status every 30 seconds
+    const interval = setInterval(() => {
+      if (transactions.some(tx => tx.status === 'pending')) {
+        updateTransactionStatuses(transactions);
+      }
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, [isConnected, stxAddress, transactions, updateTransactionStatuses]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

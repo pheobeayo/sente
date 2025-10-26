@@ -17,12 +17,13 @@ import { useStacksSwap } from '@/hooks/useStacksSwap';
 import toast from 'react-hot-toast';
 import stx from "@/public/stx.png";
 import usdc from "@/public/usdc.png";
+import { StaticImageData } from 'next/image';
 
 interface Token {
   symbol: string;
   name: string;
   address: string;
-  icon: any;
+  icon: StaticImageData;
 }
 
 // Token list
