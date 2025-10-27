@@ -10,9 +10,9 @@ import toast from 'react-hot-toast';
 
 const poolData = {
   id: '1',
-  pair: 'STX/USDC',
+  pair: 'STX/USDT',
   token0: { symbol: 'STX', amount: 1825, value: 5200000, address: 'STX' },
-  token1: { symbol: 'USDC', amount: 5200000, value: 5200000, address: 'SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9.token-usdc' },
+  token1: { symbol: 'USDT', amount: 5200000, value: 5200000, address: 'ST2QXSK64YQX3CQPC530K79XWQ98XFAM9W3XKEH3N.token-usdt' },
   tvl: 10400000,
   volume24h: 1800000,
   fees24h: 5400,
@@ -226,7 +226,7 @@ export default function PoolDetailPage() {
   // Show connection message if not connected
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <Link
             href="/pool"
@@ -237,8 +237,8 @@ export default function PoolDetailPage() {
           </Link>
 
           <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-12 border border-white/10 text-center">
-            <div className="w-16 h-16 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertCircle className="w-8 h-8 text-purple-400" />
+            <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="w-8 h-8 text-blue-400" />
             </div>
             <h2 className="text-2xl font-bold text-white mb-2">Wallet Not Connected</h2>
             <p className="text-gray-400 mb-6">Connect your wallet to view and manage liquidity</p>
@@ -249,7 +249,7 @@ export default function PoolDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Back Button */}
         <Link
@@ -292,8 +292,8 @@ export default function PoolDetailPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
             <div className="flex items-center gap-4">
               <div className="flex -space-x-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full border-4 border-slate-900" />
                 <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full border-4 border-slate-900" />
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-full border-4 border-slate-900" />
               </div>
               <div>
                 <h1 className="text-4xl font-bold text-white mb-2">{poolData.pair}</h1>
@@ -317,7 +317,7 @@ export default function PoolDetailPage() {
             <div className="flex gap-3">
               <button 
                 onClick={() => setActiveTab('add')}
-                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2"
+                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2"
               >
                 <Plus className="w-5 h-5" />
                 Add Liquidity
@@ -366,7 +366,7 @@ export default function PoolDetailPage() {
 
           <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
             <div className="text-gray-400 text-sm mb-2">APR</div>
-            <div className="text-3xl font-bold text-purple-400 mb-1">{poolData.apr}%</div>
+            <div className="text-3xl font-bold text-blue-400 mb-1">{poolData.apr}%</div>
             <div className="text-sm text-gray-400">Annual return</div>
           </div>
         </div>
@@ -380,7 +380,7 @@ export default function PoolDetailPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full" />
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full" />
                     <div>
                       <div className="text-white font-bold">{poolData.token0.symbol}</div>
                       <div className="text-gray-400 text-sm">
@@ -396,7 +396,7 @@ export default function PoolDetailPage() {
 
                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full" />
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-full" />
                     <div>
                       <div className="text-white font-bold">{poolData.token1.symbol}</div>
                       <div className="text-gray-400 text-sm">
@@ -427,7 +427,7 @@ export default function PoolDetailPage() {
                         contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                         formatter={(value: number) => [`${(value / 1000000).toFixed(2)}M`, 'TVL']}
                       />
-                      <Line type="monotone" dataKey="tvl" stroke="#8b5cf6" strokeWidth={3} dot={{ fill: '#8b5cf6', r: 4 }} />
+                      <Line type="monotone" dataKey="tvl" stroke="#3b82f6" strokeWidth={3} dot={{ fill: '#3b82f6', r: 4 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -483,7 +483,7 @@ export default function PoolDetailPage() {
                         <td className="text-right text-white py-3 px-2">{tx.value}</td>
                         <td className="text-right text-gray-400 text-sm py-3 px-2">{tx.time}</td>
                         <td className="text-right py-3 px-2">
-                          <a href="#" className="text-purple-400 hover:text-purple-300 text-sm font-mono">
+                          <a href="#" className="text-blue-400 hover:text-blue-300 text-sm font-mono">
                             {tx.hash}
                           </a>
                         </td>
@@ -502,7 +502,7 @@ export default function PoolDetailPage() {
               <h3 className="text-xl font-bold text-white mb-4">My Liquidity</h3>
               {loadingData ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+                  <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -514,7 +514,7 @@ export default function PoolDetailPage() {
                   </div>
                   <div>
                     <div className="text-gray-400 text-sm mb-1">Pool Share</div>
-                    <div className="text-xl font-bold text-purple-400">
+                    <div className="text-xl font-bold text-blue-400">
                       {myShare.toFixed(2)}%
                     </div>
                   </div>
@@ -550,7 +550,7 @@ export default function PoolDetailPage() {
                   onClick={() => setActiveTab('add')}
                   className={`flex-1 py-2 rounded-lg font-medium transition-all ${
                     activeTab === 'add'
-                      ? 'bg-purple-600 text-white'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-white/5 text-gray-400 hover:bg-white/10'
                   }`}
                 >
@@ -560,7 +560,7 @@ export default function PoolDetailPage() {
                   onClick={() => setActiveTab('remove')}
                   className={`flex-1 py-2 rounded-lg font-medium transition-all ${
                     activeTab === 'remove'
-                      ? 'bg-purple-600 text-white'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-white/5 text-gray-400 hover:bg-white/10'
                   }`}
                 >
@@ -580,7 +580,7 @@ export default function PoolDetailPage() {
                       onChange={(e) => setAmount0(e.target.value)}
                       placeholder="0.0"
                       disabled={isLoading}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                     />
                   </div>
                   <div>
@@ -593,7 +593,7 @@ export default function PoolDetailPage() {
                       onChange={(e) => setAmount1(e.target.value)}
                       placeholder="0.0"
                       disabled={isLoading}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                     />
                   </div>
                   {amount0 && amount1 && poolInfo && (
@@ -613,7 +613,7 @@ export default function PoolDetailPage() {
                   <button 
                     onClick={handleAddLiquidity}
                     disabled={isLoading || !amount0 || !amount1}
-                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-3 rounded-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3 rounded-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isLoading ? (
                       <>

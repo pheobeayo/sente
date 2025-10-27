@@ -17,6 +17,7 @@ import { useStacksSwap } from '@/hooks/useStacksSwap';
 import toast from 'react-hot-toast';
 import stx from "@/public/stx.png";
 import usdc from "@/public/usdc.png";
+import eth from "@/public/eth.png";
 import { StaticImageData } from 'next/image';
 
 interface Token {
@@ -28,9 +29,10 @@ interface Token {
 
 // Token list
 const TOKENS: Token[] = [
-  { symbol: 'STX', name: 'Stacks', address: 'STX', icon: stx },
-  { symbol: 'USDC', name: 'USD Coin', address: 'SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9.token-usdc', icon: usdc },
-  { symbol: 'USDA', name: 'USD Arkadiko', address: 'SP2C2YFP12AJZB4MABJBAJ55XECVS7E4PMMZ89YZR.arkadiko-token', icon: usdc },
+  { symbol: 'STX', name: 'Stacks', address: 'ST31JANDZ0HQQPP435G6081XFDWNQ0FH4CJ539HDK.STX', icon: stx },
+  { symbol: 'USDT', name: 'USDT', address: 'ST2QXSK64YQX3CQPC530K79XWQ98XFAM9W3XKEH3N.token-usdt', icon: usdc },
+  { symbol: 'ETH', name: 'Ethereum', address: 'ST1KNS2PT486RDG4FDPPCD87M1NK3XWTXA6WGQN98.ETH', icon: eth },
+  { symbol: 'ETH', name: 'Ether Coin', address: 'ST2JJE7SN8PE4TKD263MXKA18QECWDNFWA7QHGKE1.ETH', icon: eth },
 ];
 
 export default function SwapInterface() {
