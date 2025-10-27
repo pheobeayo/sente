@@ -22,21 +22,24 @@ export const APP_CONFIG = {
   icon: '/favicon.ico',
 };
 
-// Common contract functions
+// Common contract functions - CORRECTED to match actual deployed contract
 export const CONTRACT_FUNCTIONS = {
   // Swap functions
-  SWAP_TOKENS: 'swap-tokens',
-  GET_SWAP_QUOTE: 'get-swap-quote',
+  SWAP_X_FOR_Y: 'swap-x-for-y',
+  SWAP_Y_FOR_X: 'swap-y-for-x',
+  GET_SWAP_OUTPUT: 'get-swap-output',
  
   // Liquidity functions
   ADD_LIQUIDITY: 'add-liquidity',
   REMOVE_LIQUIDITY: 'remove-liquidity',
-  GET_LIQUIDITY: 'get-liquidity',
  
   // Pool functions
   CREATE_POOL: 'create-pool',
-  GET_POOL_INFO: 'get-pool-info',
-  GET_POOL_RESERVES: 'get-pool-reserves',
+  GET_POOL: 'get-pool', // ✅ CORRECTED - Your contract uses 'get-pool' not 'get-pool-info'
+  
+  // User functions
+  GET_USER_SHARES: 'get-user-shares',
+  IS_TOKEN_SUPPORTED: 'is-token-supported',
  
   // Token functions
   GET_BALANCE: 'get-balance',
@@ -45,9 +48,9 @@ export const CONTRACT_FUNCTIONS = {
 
 // Token addresses on Stacks
 export const STACKS_TOKENS = {
-  STX: 'STX', // Native STX token
-  USDA: `${CONTRACT_ADDRESS}.usda-token`,
-  XUSD: `${CONTRACT_ADDRESS}.xusd-token`,
+  STX: `${CONTRACT_ADDRESS}.STX`, 
+  USDT: `${CONTRACT_ADDRESS}.token-usdt`,
+  ETH: `${CONTRACT_ADDRESS}.ETH`,
   // Add more tokens as needed
 } as const;
 

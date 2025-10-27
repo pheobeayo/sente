@@ -21,6 +21,13 @@ export class StacksDexContract {
     senderAddress: string
   ) {
     try {
+      console.log(`Calling read-only function: ${functionName}`, {
+        contractAddress: CONTRACT_ADDRESS,
+        contractName: CONTRACT_NAME,
+        senderAddress,
+        functionArgs,
+      });
+
       const result = await fetchCallReadOnlyFunction({
         contractAddress: CONTRACT_ADDRESS,
         contractName: CONTRACT_NAME,
@@ -30,22 +37,44 @@ export class StacksDexContract {
         senderAddress,
       });
 
-      return cvToValue(result);
+      const value = cvToValue(result);
+      console.log(`Result from ${functionName}:`, value);
+      return value;
     } catch (error) {
       console.error(`Error calling ${functionName}:`, error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        contractAddress: CONTRACT_ADDRESS,
+        contractName: CONTRACT_NAME,
+        functionName,
+      });
       throw error;
     }
   }
 
   /**
-   * Get pool information using get-pool function
+   * Get pool information using get-pool function (CORRECT for your contract)
    */
   async getPoolInfo(tokenX: string, tokenY: string, senderAddress: string) {
+    console.log('getPoolInfo called with:', { tokenX, tokenY, senderAddress });
+
+    // Parse token strings to extract contract name only (if format is address.token-name)
+    const parseToken = (token: string) => {
+      const parts = token.split('.');
+      return parts.length > 1 ? parts[1] : token;
+    };
+
+    const tokenXName = parseToken(tokenX);
+    const tokenYName = parseToken(tokenY);
+
+    console.log('Parsed token names:', { tokenXName, tokenYName });
+
     const functionArgs = [
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenXName),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenYName),
     ];
 
+    
     return this.callReadOnly('get-pool', functionArgs, senderAddress);
   }
 
@@ -59,6 +88,8 @@ export class StacksDexContract {
     reserveOut: number,
     senderAddress: string
   ) {
+    console.log('getSwapOutput called with:', { amountIn, reserveIn, reserveOut });
+
     const functionArgs = [
       uintCV(amountIn),
       uintCV(reserveIn),
@@ -76,10 +107,18 @@ export class StacksDexContract {
     tokenY: string,
     userAddress: string
   ) {
+    const parseToken = (token: string) => {
+      const parts = token.split('.');
+      return parts.length > 1 ? parts[1] : token;
+    };
+
+    const tokenXName = parseToken(tokenX);
+    const tokenYName = parseToken(tokenY);
+
     const functionArgs = [
       standardPrincipalCV(userAddress),
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenXName),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenYName),
     ];
 
     return this.callReadOnly('get-user-shares', functionArgs, userAddress);
@@ -95,20 +134,55 @@ export class StacksDexContract {
     senderAddress: string
   ) {
     try {
+      console.log('getSwapQuote called with:', { tokenIn, tokenOut, amountIn });
+
       // Get pool information
       const poolData = await this.getPoolInfo(tokenIn, tokenOut, senderAddress);
       
-      if (!poolData || !poolData.value) {
-        throw new Error('Pool not found');
+      console.log('Pool data structure:', JSON.stringify(poolData, null, 2));
+
+      if (!poolData) {
+        throw new Error('Pool not found - getPoolInfo returned null or undefined');
       }
 
-      // Extract reserves from pool data
-      // Structure might be: { reserve-x: uint, reserve-y: uint, shares-total: uint }
-      const reserveX = Number(poolData.value['reserve-x'] || poolData.value.reserveX || 0);
-      const reserveY = Number(poolData.value['reserve-y'] || poolData.value.reserveY || 0);
+      // Extract reserves from pool data - handle multiple possible structures
+      let reserveX = 0;
+      let reserveY = 0;
+
+      if (poolData.value) {
+        reserveX = Number(
+          poolData.value['reserve-x'] || 
+          poolData.value.reserveX || 
+          poolData.value['reserveA'] ||
+          0
+        );
+        
+        reserveY = Number(
+          poolData.value['reserve-y'] || 
+          poolData.value.reserveY || 
+          poolData.value['reserveB'] ||
+          0
+        );
+      } else {
+        reserveX = Number(
+          poolData['reserve-x'] || 
+          poolData.reserveX || 
+          poolData['reserveA'] ||
+          0
+        );
+        
+        reserveY = Number(
+          poolData['reserve-y'] || 
+          poolData.reserveY || 
+          poolData['reserveB'] ||
+          0
+        );
+      }
+
+      console.log('Extracted reserves:', { reserveX, reserveY });
 
       if (reserveX === 0 || reserveY === 0) {
-        throw new Error('Pool has no liquidity');
+        throw new Error(`Pool has no liquidity or pool doesn't exist. Reserves: X=${reserveX}, Y=${reserveY}`);
       }
 
       // Calculate output using the contract's formula
@@ -138,9 +212,17 @@ export class StacksDexContract {
     onFinish: (data: { txId: string }) => void,
     onCancel: () => void
   ) {
+    const parseToken = (token: string) => {
+      const parts = token.split('.');
+      return parts.length > 1 ? parts[1] : token;
+    };
+
+    const tokenXName = parseToken(tokenX);
+    const tokenYName = parseToken(tokenY);
+
     const functionArgs = [
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenXName),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenYName),
       uintCV(amountIn),
       uintCV(minAmountOut),
     ];
@@ -177,9 +259,17 @@ export class StacksDexContract {
     onFinish: (data: { txId: string }) => void,
     onCancel: () => void
   ) {
+    const parseToken = (token: string) => {
+      const parts = token.split('.');
+      return parts.length > 1 ? parts[1] : token;
+    };
+
+    const tokenXName = parseToken(tokenX);
+    const tokenYName = parseToken(tokenY);
+
     const functionArgs = [
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenXName),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenYName),
       uintCV(amountIn),
       uintCV(minAmountOut),
     ];
@@ -216,9 +306,11 @@ export class StacksDexContract {
     onFinish: (data: { txId: string }) => void,
     onCancel: () => void
   ) {
+    console.log('swapTokens called:', { tokenIn, tokenOut, amountIn, minAmountOut });
+    
     // Determine swap direction
     // Assuming tokenIn is X and tokenOut is Y for swap-x-for-y
-    // You might need to adjust this logic based on your token ordering
+    
     return this.swapXForY(
       tokenIn,
       tokenOut,
@@ -228,6 +320,49 @@ export class StacksDexContract {
       onFinish,
       onCancel
     );
+  }
+
+  /**
+   * Create a new liquidity pool
+   */
+  async createPool(
+    tokenX: string,
+    tokenY: string,
+    senderAddress: string,
+    onFinish: (data: { txId: string }) => void,
+    onCancel: () => void
+  ) {
+    const parseToken = (token: string) => {
+      const parts = token.split('.');
+      return parts.length > 1 ? parts[1] : token;
+    };
+
+    const tokenXName = parseToken(tokenX);
+    const tokenYName = parseToken(tokenY);
+
+    const functionArgs = [
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenXName),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenYName),
+    ];
+
+    const txOptions: ContractCallOptions = {
+      contractAddress: CONTRACT_ADDRESS,
+      contractName: CONTRACT_NAME,
+      functionName: 'create-pool',
+      functionArgs,
+      network: NETWORK,
+      postConditionMode: PostConditionMode.Allow,
+      onFinish: (data) => {
+        console.log('Pool created:', data);
+        onFinish({ txId: data.txId });
+      },
+      onCancel: () => {
+        console.log('Pool creation cancelled');
+        onCancel();
+      },
+    };
+
+    return openContractCall(txOptions);
   }
 
   /**
@@ -243,9 +378,17 @@ export class StacksDexContract {
     onFinish: (data: { txId: string }) => void,
     onCancel: () => void
   ) {
+    const parseToken = (token: string) => {
+      const parts = token.split('.');
+      return parts.length > 1 ? parts[1] : token;
+    };
+
+    const tokenXName = parseToken(tokenX);
+    const tokenYName = parseToken(tokenY);
+
     const functionArgs = [
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenXName),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenYName),
       uintCV(amountX),
       uintCV(amountY),
       uintCV(minShares),
@@ -284,9 +427,17 @@ export class StacksDexContract {
     onFinish: (data: { txId: string }) => void,
     onCancel: () => void
   ) {
+    const parseToken = (token: string) => {
+      const parts = token.split('.');
+      return parts.length > 1 ? parts[1] : token;
+    };
+
+    const tokenXName = parseToken(tokenX);
+    const tokenYName = parseToken(tokenY);
+
     const functionArgs = [
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenX),
-      contractPrincipalCV(CONTRACT_ADDRESS, tokenY),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenXName),
+      contractPrincipalCV(CONTRACT_ADDRESS, tokenYName),
       uintCV(shares),
       uintCV(minAmountX),
       uintCV(minAmountY),

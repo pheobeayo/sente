@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, TrendingUp, TrendingDown, Droplets, DollarSign, Activity, Plus, ArrowRight, AlertCircle } from 'lucide-react';
+import { Search, Droplets, DollarSign, Activity, Plus, ArrowRight, AlertCircle, Loader2, CheckCircle, X } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useStacksWallet } from '@/hooks/useStacksWallet';
 import { useStacksPool } from '@/hooks/useStacksPool';
+import { stacksDexContract } from '@/lib/contract';
+import toast from 'react-hot-toast';
 import stx from "@/public/stx.png";
 import usdc from "@/public/usdc.png";
 import { StaticImageData } from 'next/image';
@@ -30,51 +32,35 @@ interface Pool {
 const pools: Pool[] = [
   {
     id: '1',
-    pair: 'STX/USDC',
+    pair: 'STX/USDT',
     token0: 'STX',
-    token1: 'USDC',
+    token1: 'USDT',
     token0Address: 'STX',
-    token1Address: 'SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9.token-usdc',
+    token1Address: 'token-usdt',
     token0Icon: stx,
     token1Icon: usdc,
-    tvl: 5200000,
-    volume24h: 1800000,
-    fees24h: 5400,
-    apr: 24.5,
-    change24h: 12.5,
-    liquidity: 'High'
+    tvl: 0,
+    volume24h: 0,
+    fees24h: 0,
+    apr: 0,
+    change24h: 0,
+    liquidity: 'Unknown'
   },
   {
     id: '2',
-    pair: 'STX/XUSD',
+    pair: 'STX/ETH',
     token0: 'STX',
-    token1: 'XUSD',
+    token1: 'ETH',
     token0Address: 'STX',
-    token1Address: 'SP2C2YFP12AJZB4MABJBAJ55XECVS7E4PMMZ89YZR.xusd-token',
+    token1Address: 'ETH',
     token0Icon: stx,
     token1Icon: usdc,
-    tvl: 3800000,
-    volume24h: 1200000,
-    fees24h: 3600,
-    apr: 18.2,
-    change24h: -3.2,
-    liquidity: 'High'
-  },
-  {
-    id: '3',
-    pair: 'USDC/XUSD',
-    token0: 'USDC',
-    token1: 'XUSD',
-    token0Address: 'SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9.token-usdc',
-    token1Address: 'SP2C2YFP12AJZB4MABJBAJ55XECVS7E4PMMZ89YZR.xusd-token',
-    token0Icon: usdc,
-    token1Icon: usdc,
-    tvl: 2900000,
-    volume24h: 890000,
-    fees24h: 2670,
-    apr: 15.8,
-    change24h: 8.7,
-    liquidity: 'Medium'
+    tvl: 0,
+    volume24h: 0,
+    fees24h: 0,
+    apr: 0,
+    change24h: 0,
+    liquidity: 'Unknown'
   },
 ];
 
@@ -83,24 +69,345 @@ interface UserLiquidityData {
   value: number;
 }
 
+interface PoolStatus {
+  exists: boolean;
+  hasLiquidity: boolean;
+  reserve0: number;
+  reserve1: number;
+}
+
+interface CreatePoolModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  pool: Pool;
+  onSuccess: () => void;
+}
+
+function CreatePoolModal({ isOpen, onClose, pool, onSuccess }: CreatePoolModalProps) {
+  const { stxAddress, isConnected } = useStacksWallet();
+  const [step, setStep] = useState<'create' | 'liquidity' | 'done'>('create');
+  const [isCreating, setIsCreating] = useState(false);
+  const [isAddingLiquidity, setIsAddingLiquidity] = useState(false);
+  const [amount0, setAmount0] = useState('1');
+  const [amount1, setAmount1] = useState('1');
+
+  const handleCreatePool = async () => {
+    if (!isConnected || !stxAddress) {
+      toast.error('Please connect your wallet');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      await stacksDexContract.createPool(
+        pool.token0Address,
+        pool.token1Address,
+        stxAddress,
+        (data) => {
+          console.log('Pool created:', data);
+          setIsCreating(false);
+          setStep('liquidity');
+          toast.success('Pool created! Now add initial liquidity.');
+        },
+        () => {
+          setIsCreating(false);
+          toast.error('Pool creation cancelled');
+        }
+      );
+    } catch (error) {
+      console.error('Error creating pool:', error);
+      setIsCreating(false);
+      toast.error(error instanceof Error ? error.message : 'Failed to create pool');
+    }
+  };
+
+  const handleAddLiquidity = async () => {
+    if (!isConnected || !stxAddress) {
+      toast.error('Please connect your wallet');
+      return;
+    }
+
+    const amt0 = parseFloat(amount0);
+    const amt1 = parseFloat(amount1);
+
+    if (isNaN(amt0) || isNaN(amt1) || amt0 <= 0 || amt1 <= 0) {
+      toast.error('Please enter valid amounts');
+      return;
+    }
+
+    setIsAddingLiquidity(true);
+    try {
+      await stacksDexContract.addLiquidity(
+        pool.token0Address,
+        pool.token1Address,
+        Math.floor(amt0 * 1000000),
+        Math.floor(amt1 * 1000000),
+        0,
+        stxAddress,
+        (data) => {
+          console.log('Liquidity added:', data);
+          setIsAddingLiquidity(false);
+          setStep('done');
+          toast.success('Liquidity added successfully!');
+          setTimeout(() => {
+            onSuccess();
+            onClose();
+          }, 2000);
+        },
+        () => {
+          setIsAddingLiquidity(false);
+          toast.error('Liquidity addition cancelled');
+        }
+      );
+    } catch (error) {
+      console.error('Error adding liquidity:', error);
+      setIsAddingLiquidity(false);
+      toast.error(error instanceof Error ? error.message : 'Failed to add liquidity');
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-900 rounded-2xl border border-white/10 max-w-md w-full shadow-2xl">
+        <div className="flex items-center justify-between p-6 border-b border-white/10">
+          <div>
+            <h3 className="text-xl font-bold text-white">Create Pool</h3>
+            <p className="text-gray-400 text-sm mt-1">{pool.pair}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {step === 'create' && (
+            <div className="space-y-4">
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                <p className="text-blue-400 text-sm">
+                  🏊 This pool doesn&apos;t exist yet. Create it to enable trading for this pair.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-gray-400">Token Pair</span>
+                  <span className="text-white font-medium">{pool.pair}</span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-gray-400">Fee Tier</span>
+                  <span className="text-white font-medium">0.3%</span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-gray-400">Token 0</span>
+                  <span className="text-white font-medium">{pool.token0Address}</span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-gray-400">Token 1</span>
+                  <span className="text-white font-medium">{pool.token1Address}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={handleCreatePool}
+                disabled={!isConnected || isCreating}
+                className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white py-3 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isCreating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Creating Pool...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5" />
+                    Create Pool
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {step === 'liquidity' && (
+            <div className="space-y-4">
+              <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <p className="text-purple-400 text-sm">
+                  💧 Pool created! Now add initial liquidity to enable swaps.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-400 block mb-2">
+                  Amount {pool.token0} (in full units)
+                </label>
+                <input
+                  type="number"
+                  value={amount0}
+                  onChange={(e) => setAmount0(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="1.0"
+                  min="0"
+                  step="0.1"
+                  disabled={isAddingLiquidity}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-400 block mb-2">
+                  Amount {pool.token1} (in full units)
+                </label>
+                <input
+                  type="number"
+                  value={amount1}
+                  onChange={(e) => setAmount1(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="1.0"
+                  min="0"
+                  step="0.1"
+                  disabled={isAddingLiquidity}
+                />
+              </div>
+
+              <div className="bg-white/5 rounded-lg p-3">
+                <p className="text-gray-400 text-xs">
+                  Note: Amounts will be converted to microunits (multiplied by 1,000,000) automatically.
+                </p>
+              </div>
+
+              <button
+                onClick={handleAddLiquidity}
+                disabled={!isConnected || isAddingLiquidity}
+                className="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white py-3 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isAddingLiquidity ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Adding Liquidity...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5" />
+                    Add Liquidity
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {step === 'done' && (
+            <div className="space-y-4">
+              <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-6">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <CheckCircle className="w-12 h-12 text-green-400" />
+                  <div>
+                    <p className="text-green-400 font-bold text-lg">Success!</p>
+                    <p className="text-gray-400 text-sm mt-1">
+                      Pool is now active and ready for trading.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  onSuccess();
+                  onClose();
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-all"
+              >
+                Done
+              </button>
+            </div>
+          )}
+
+          {!isConnected && (
+            <div className="mt-4 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+              <p className="text-red-400 text-sm">
+                Please connect your wallet to proceed.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PoolPage() {
   const { isConnected, stxAddress } = useStacksWallet();
-  const { getUserLiquidity } = useStacksPool();
+  const { getUserLiquidity, getPoolInfo } = useStacksPool();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'tvl' | 'volume24h' | 'apr'>('tvl');
   const [userPools, setUserPools] = useState<Record<string, UserLiquidityData>>({});
+  const [poolStatuses, setPoolStatuses] = useState<Record<string, PoolStatus>>({});
   const [loadingUserData, setLoadingUserData] = useState(false);
+  const [loadingPoolData, setLoadingPoolData] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
 
   const filteredPools = pools.filter(pool =>
     pool.pair.toLowerCase().includes(searchQuery.toLowerCase())
   ).sort((a, b) => b[sortBy] - a[sortBy]);
 
-  const totalTVL = pools.reduce((sum, pool) => sum + pool.tvl, 0);
-  const totalVolume = pools.reduce((sum, pool) => sum + pool.volume24h, 0);
-  const totalFees = pools.reduce((sum, pool) => sum + pool.fees24h, 0);
+  const loadPoolStatuses = async () => {
+    if (!stxAddress) return;
+    
+    setLoadingPoolData(true);
+    try {
+      const statuses: Record<string, PoolStatus> = {};
+      
+      for (const pool of pools) {
+        try {
+          console.log(`Checking pool: ${pool.token0Address}/${pool.token1Address}`);
+          const poolInfo = await getPoolInfo(pool.token0Address, pool.token1Address);
+          
+          if (poolInfo) {
+            const hasLiquidity = poolInfo.reserve0 > 0 && poolInfo.reserve1 > 0;
+            statuses[pool.id] = {
+              exists: true,
+              hasLiquidity,
+              reserve0: poolInfo.reserve0,
+              reserve1: poolInfo.reserve1
+            };
+          } else {
+            statuses[pool.id] = {
+              exists: false,
+              hasLiquidity: false,
+              reserve0: 0,
+              reserve1: 0
+            };
+          }
+        } catch (err) {
+          console.error(`Error loading pool status for ${pool.pair}:`, err);
+          statuses[pool.id] = {
+            exists: false,
+            hasLiquidity: false,
+            reserve0: 0,
+            reserve1: 0
+          };
+        }
+      }
+      
+      setPoolStatuses(statuses);
+    } catch (err) {
+      console.error('Error loading pool statuses:', err);
+    } finally {
+      setLoadingPoolData(false);
+    }
+  };
 
-  // Load user's liquidity positions
+  useEffect(() => {
+    if (stxAddress) {
+      loadPoolStatuses();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stxAddress]);
+
   useEffect(() => {
     const loadUserLiquidity = async () => {
       if (!stxAddress || !isConnected) return;
@@ -136,10 +443,27 @@ export default function PoolPage() {
     }
   }, [isConnected, stxAddress, getUserLiquidity]);
 
+  const handleOpenCreateModal = (pool: Pool) => {
+    setSelectedPool(pool);
+    setCreateModalOpen(true);
+  };
+
+  const handleCloseCreateModal = () => {
+    setCreateModalOpen(false);
+    setSelectedPool(null);
+  };
+
+  const handlePoolCreated = () => {
+    loadPoolStatuses();
+  };
+
+  const totalTVL = Object.values(poolStatuses).reduce((sum, status) => {
+    return sum + ((status.reserve0 / 1000000) * 0.85 * 2);
+  }, 0);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Header */}
         <div className="flex items-center justify-between mb-12">
           <div>
             <h1 className="text-5xl font-bold text-white mb-4">Liquidity Pools</h1>
@@ -154,15 +478,46 @@ export default function PoolPage() {
           </Link>
         </div>
 
-        {/* User's Positions (if connected) */}
-        {isConnected && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 backdrop-blur-lg rounded-2xl p-6 border border-blue-500/30">
+            <div className="flex items-center gap-3 mb-2">
+              <DollarSign className="w-6 h-6 text-blue-400" />
+              <span className="text-gray-400">Total TVL</span>
+            </div>
+            <div className="text-3xl font-bold text-white">
+              {loadingPoolData ? '...' : `$${totalTVL.toFixed(2)}`}
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-green-600/20 to-emerald-600/20 backdrop-blur-lg rounded-2xl p-6 border border-green-500/30">
+            <div className="flex items-center gap-3 mb-2">
+              <Activity className="w-6 h-6 text-green-400" />
+              <span className="text-gray-400">Active Pools</span>
+            </div>
+            <div className="text-3xl font-bold text-white">
+              {Object.values(poolStatuses).filter(s => s.hasLiquidity).length}
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-purple-600/20 to-pink-600/20 backdrop-blur-lg rounded-2xl p-6 border border-purple-500/30">
+            <div className="flex items-center gap-3 mb-2">
+              <Droplets className="w-6 h-6 text-purple-400" />
+              <span className="text-gray-400">Your Positions</span>
+            </div>
+            <div className="text-3xl font-bold text-white">
+              {loadingUserData ? '...' : Object.keys(userPools).length}
+            </div>
+          </div>
+        </div>
+
+        {isConnected && Object.keys(userPools).length > 0 && (
           <div className="mb-8 bg-gradient-to-r from-purple-600/20 to-blue-600/20 backdrop-blur-lg rounded-2xl p-6 border border-purple-500/30">
             <h2 className="text-2xl font-bold text-white mb-4">Your Positions</h2>
             {loadingUserData ? (
               <div className="flex items-center justify-center py-8">
                 <div className="w-8 h-8 border-4 border-purple-400 border-t-transparent rounded-full animate-spin" />
               </div>
-            ) : Object.keys(userPools).length > 0 ? (
+            ) : (
               <div className="space-y-3">
                 {Object.entries(userPools).map(([poolId, data]) => {
                   const pool = pools.find(p => p.id === poolId);
@@ -194,14 +549,16 @@ export default function PoolPage() {
                         </div>
                         <div>
                           <div className="text-white font-bold">{pool.pair}</div>
-                          <div className="text-gray-400 text-sm">Liquidity: {data.liquidity.toFixed(6)}</div>
+                          <div className="text-gray-400 text-sm">
+                            {(data.liquidity / 1000000).toFixed(4)} LP Tokens
+                          </div>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-white font-bold">${data.value.toLocaleString()}</div>
-                        <Link 
-                          href={`/pool/${poolId}`}
-                          className="text-purple-400 hover:text-purple-300 text-sm"
+                        <div className="text-white font-bold">${data.value.toFixed(2)}</div>
+                        <Link
+                          href={`/pool/${pool.id}`}
+                          className="text-blue-400 hover:text-blue-300 text-sm"
                         >
                           Manage →
                         </Link>
@@ -210,78 +567,19 @@ export default function PoolPage() {
                   );
                 })}
               </div>
-            ) : (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <Droplets className="w-6 h-6 text-purple-400" />
-                </div>
-                <p className="text-gray-400">You don&apos;t have any liquidity positions yet.</p>
-                <Link 
-                  href="/pool/add"
-                  className="inline-block mt-3 text-purple-400 hover:text-purple-300 font-medium"
-                >
-                  Add your first position →
-                </Link>
-              </div>
             )}
           </div>
         )}
 
-        {/* Not Connected Message */}
-        {!isConnected && (
-          <div className="mb-8 bg-blue-600/10 backdrop-blur-lg rounded-2xl p-6 border border-blue-500/30">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-blue-600/20 rounded-full flex items-center justify-center flex-shrink-0">
-                <AlertCircle className="w-6 h-6 text-blue-400" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-white mb-2">Connect Your Wallet</h3>
-                <p className="text-gray-300">Connect your wallet to view your liquidity positions and add liquidity to pools.</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-400 text-sm">Total Value Locked</span>
-              <Droplets className="w-5 h-5 text-blue-400" />
-            </div>
-            <p className="text-3xl font-bold text-white">${(totalTVL / 1000000).toFixed(1)}M</p>
-            <p className="text-sm text-green-400 mt-1">+8.2% this week</p>
-          </div>
-
-          <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-400 text-sm">24h Volume</span>
-              <Activity className="w-5 h-5 text-blue-400" />
-            </div>
-            <p className="text-3xl font-bold text-white">${(totalVolume / 1000000).toFixed(1)}M</p>
-            <p className="text-sm text-green-400 mt-1">+15.3% from yesterday</p>
-          </div>
-
-          <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-400 text-sm">24h Fees</span>
-              <DollarSign className="w-5 h-5 text-green-400" />
-            </div>
-            <p className="text-3xl font-bold text-white">${(totalFees / 1000).toFixed(1)}K</p>
-            <p className="text-sm text-green-400 mt-1">+12.7% from yesterday</p>
-          </div>
-        </div>
-
-        {/* Search and Filter */}
-        <div className="flex flex-col md:flex-row gap-4 mb-8">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <div className="flex flex-col md:flex-row items-center gap-4 mb-6">
+          <div className="flex-1 w-full relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
               placeholder="Search pools..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-white/5 backdrop-blur-lg border border-white/10 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex gap-2">
@@ -318,106 +616,124 @@ export default function PoolPage() {
           </div>
         </div>
 
-        {/* Pools Table */}
         <div className="bg-white/5 backdrop-blur-lg rounded-2xl border border-white/10 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-white/10">
                   <th className="text-left text-gray-400 font-medium py-4 px-6">Pool</th>
-                  <th className="text-right text-gray-400 font-medium py-4 px-6">TVL</th>
-                  <th className="text-right text-gray-400 font-medium py-4 px-6">24h Volume</th>
-                  <th className="text-right text-gray-400 font-medium py-4 px-6">24h Fees</th>
-                  <th className="text-right text-gray-400 font-medium py-4 px-6">APR</th>
-                  <th className="text-right text-gray-400 font-medium py-4 px-6">24h Change</th>
+                  <th className="text-right text-gray-400 font-medium py-4 px-6">Status</th>
+                  <th className="text-right text-gray-400 font-medium py-4 px-6">Reserves</th>
                   <th className="text-right text-gray-400 font-medium py-4 px-6"></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredPools.map((pool) => (
-                  <tr
-                    key={pool.id}
-                    className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                  >
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="flex -space-x-2">
-                          <div className="w-8 h-8 relative">
-                            <Image 
-                              src={pool.token0Icon} 
-                              alt={pool.token0} 
-                              width={32} 
-                              height={32} 
-                              className="rounded-full border-2 border-slate-900"
-                              priority
-                            />
+                {filteredPools.map((pool) => {
+                  const status = poolStatuses[pool.id];
+                  return (
+                    <tr
+                      key={pool.id}
+                      className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                    >
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-3">
+                          <div className="flex -space-x-2">
+                            <div className="w-8 h-8 relative">
+                              <Image 
+                                src={pool.token0Icon} 
+                                alt={pool.token0} 
+                                width={32} 
+                                height={32} 
+                                className="rounded-full border-2 border-slate-900"
+                                priority
+                              />
+                            </div>
+                            <div className="w-8 h-8 relative">
+                              <Image 
+                                src={pool.token1Icon} 
+                                alt={pool.token1} 
+                                width={32} 
+                                height={32} 
+                                className="rounded-full border-2 border-slate-900"
+                                priority
+                              />
+                            </div>
                           </div>
-                          <div className="w-8 h-8 relative">
-                            <Image 
-                              src={pool.token1Icon} 
-                              alt={pool.token1} 
-                              width={32} 
-                              height={32} 
-                              className="rounded-full border-2 border-slate-900"
-                              priority
-                            />
+                          <div>
+                            <div className="text-white font-bold">{pool.pair}</div>
+                            <div className="text-gray-400 text-xs">
+                              {pool.token0Address} / {pool.token1Address}
+                            </div>
                           </div>
                         </div>
-                        <div>
-                          <div className="text-white font-bold">{pool.pair}</div>
-                          <div className="text-gray-400 text-xs">{pool.liquidity} liquidity</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="text-right py-4 px-6">
-                      <div className="text-white font-medium">
-                        ${(pool.tvl / 1000000).toFixed(2)}M
-                      </div>
-                    </td>
-                    <td className="text-right py-4 px-6">
-                      <div className="text-white font-medium">
-                        ${(pool.volume24h / 1000000).toFixed(2)}M
-                      </div>
-                    </td>
-                    <td className="text-right py-4 px-6">
-                      <div className="text-green-400 font-medium">
-                        ${(pool.fees24h / 1000).toFixed(1)}K
-                      </div>
-                    </td>
-                    <td className="text-right py-4 px-6">
-                      <div className="text-blue-400 font-bold">
-                        {pool.apr.toFixed(1)}%
-                      </div>
-                    </td>
-                    <td className="text-right py-4 px-6">
-                      <div className={`flex items-center justify-end gap-1 ${
-                        pool.change24h > 0 ? 'text-green-400' : 'text-red-400'
-                      }`}>
-                        {pool.change24h > 0 ? (
-                          <TrendingUp className="w-4 h-4" />
+                      </td>
+                      <td className="text-right py-4 px-6">
+                        {loadingPoolData ? (
+                          <span className="text-gray-400">Loading...</span>
+                        ) : !status?.exists ? (
+                          <span className="text-red-400 font-medium">Not Created</span>
+                        ) : !status.hasLiquidity ? (
+                          <span className="text-yellow-400 font-medium">No Liquidity</span>
                         ) : (
-                          <TrendingDown className="w-4 h-4" />
+                          <span className="text-green-400 font-medium">● Active</span>
                         )}
-                        <span className="font-medium">{Math.abs(pool.change24h)}%</span>
-                      </div>
-                    </td>
-                    <td className="text-right py-4 px-6">
-                      <Link
-                        href={`/pool/${pool.id}`}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all"
-                      >
-                        Details
-                        <ArrowRight className="w-4 h-4" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="text-right py-4 px-6">
+                        {status?.hasLiquidity ? (
+                          <div className="text-white font-medium">
+                            <div>{(status.reserve0 / 1000000).toFixed(2)} {pool.token0}</div>
+                            <div className="text-gray-400 text-sm">
+                              {(status.reserve1 / 1000000).toFixed(2)} {pool.token1}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="text-right py-4 px-6">
+                        {!status?.exists ? (
+                          <button
+                            onClick={() => handleOpenCreateModal(pool)}
+                            disabled={!isConnected}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Plus className="w-4 h-4" />
+                            Create Pool
+                          </button>
+                        ) : (
+                          <Link
+                            href={`/pool/${pool.id}`}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all"
+                          >
+                            {!status.hasLiquidity ? 'Add Liquidity' : 'Manage'}
+                            <ArrowRight className="w-4 h-4" />
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Info Cards */}
+        {!isConnected && (
+          <div className="mt-8 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-6 h-6 text-yellow-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-lg font-bold text-yellow-400 mb-2">
+                  Connect Wallet to Get Started
+                </h3>
+                <p className="text-gray-300">
+                  Connect your wallet to view pool details, create pools, add liquidity, and start earning fees.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
           <div className="bg-gradient-to-br from-blue-600/20 to-cyan-600/20 backdrop-blur-lg rounded-2xl p-8 border border-blue-500/30">
             <h3 className="text-2xl font-bold text-white mb-4">Why Provide Liquidity?</h3>
@@ -468,6 +784,15 @@ export default function PoolPage() {
           </div>
         </div>
       </div>
+
+      {selectedPool && (
+        <CreatePoolModal
+          isOpen={createModalOpen}
+          onClose={handleCloseCreateModal}
+          pool={selectedPool}
+          onSuccess={handlePoolCreated}
+        />
+      )}
     </div>
   );
 }

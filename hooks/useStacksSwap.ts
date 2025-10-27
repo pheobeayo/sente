@@ -35,30 +35,57 @@ export function useStacksSwap() {
       }
 
       try {
+        console.log('Getting quote for:', { tokenIn, tokenOut, amountIn, stxAddress });
+        
         // Get pool information
         const poolData = await stacksDexContract.getPoolInfo(tokenIn, tokenOut, stxAddress);
         
-        if (!poolData || !poolData.value) {
-          throw new Error('Pool not found');
+        console.log('Pool data received:', poolData);
+        
+        if (!poolData) {
+          throw new Error('Pool not found - no pool data returned');
         }
 
-        // Extract reserves - check multiple possible property names
-        const reserveX = Number(
-          poolData.value['reserve-x'] || 
-          poolData.value.reserveX || 
-          poolData.value['reserveA'] ||
-          0
-        );
-        
-        const reserveY = Number(
-          poolData.value['reserve-y'] || 
-          poolData.value.reserveY || 
-          poolData.value['reserveB'] ||
-          0
-        );
+        // Handle different response structures
+        let reserveX = 0;
+        let reserveY = 0;
+
+        // Check if poolData has a value property (common in Clarity responses)
+        if (poolData.value) {
+          reserveX = Number(
+            poolData.value['reserve-x'] || 
+            poolData.value.reserveX || 
+            poolData.value['reserveA'] ||
+            0
+          );
+          
+          reserveY = Number(
+            poolData.value['reserve-y'] || 
+            poolData.value.reserveY || 
+            poolData.value['reserveB'] ||
+            0
+          );
+        } else {
+          // Direct properties
+          reserveX = Number(
+            poolData['reserve-x'] || 
+            poolData.reserveX || 
+            poolData['reserveA'] ||
+            0
+          );
+          
+          reserveY = Number(
+            poolData['reserve-y'] || 
+            poolData.reserveY || 
+            poolData['reserveB'] ||
+            0
+          );
+        }
+
+        console.log('Extracted reserves:', { reserveX, reserveY });
 
         if (reserveX === 0 || reserveY === 0) {
-          throw new Error('Pool has no liquidity');
+          throw new Error(`Pool has no liquidity. Reserves: X=${reserveX}, Y=${reserveY}`);
         }
 
         // Calculate output using the contract's constant product formula
@@ -69,25 +96,52 @@ export function useStacksSwap() {
           stxAddress
         );
         
-        // Parse the response
-        const outputAmount = Number(
-          typeof amountOut === 'object' && amountOut !== null 
-            ? (amountOut.value || amountOut)
-            : amountOut
-        );
+        console.log('Swap output received:', amountOut);
+        
+        // Parse the response - handle various possible structures
+        let outputAmount = 0;
+        
+        if (typeof amountOut === 'number') {
+          outputAmount = amountOut;
+        } else if (typeof amountOut === 'object' && amountOut !== null) {
+          outputAmount = Number(
+            amountOut.value || 
+            amountOut.amount || 
+            amountOut
+          );
+        } else {
+          outputAmount = Number(amountOut);
+        }
+        
+        console.log('Parsed output amount:', outputAmount);
+        
+        if (isNaN(outputAmount) || outputAmount <= 0) {
+          throw new Error(`Invalid output amount calculated: ${outputAmount}`);
+        }
         
         // Calculate price impact
         const spotPrice = reserveY / reserveX;
         const effectivePrice = outputAmount / amountIn;
         const priceImpact = Math.abs((spotPrice - effectivePrice) / spotPrice) * 100;
         
-        return {
+        const quote = {
           amountOut: outputAmount,
           priceImpact: Math.min(priceImpact, 100), // Cap at 100%
           fee: 0.003, 
         };
+
+        console.log('Final quote:', quote);
+        
+        return quote;
       } catch (error: any) {
         console.error('Error getting quote:', error);
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          tokenIn,
+          tokenOut,
+          amountIn,
+        });
         throw error;
       }
     },
