@@ -22,7 +22,7 @@ export const APP_CONFIG = {
   icon: '/favicon.ico',
 };
 
-// Common contract functions - CORRECTED to match actual deployed contract
+// Common contract functions
 export const CONTRACT_FUNCTIONS = {
   // Swap functions
   SWAP_X_FOR_Y: 'swap-x-for-y',
@@ -35,7 +35,7 @@ export const CONTRACT_FUNCTIONS = {
  
   // Pool functions
   CREATE_POOL: 'create-pool',
-  GET_POOL: 'get-pool', // ✅ CORRECTED - Your contract uses 'get-pool' not 'get-pool-info'
+  GET_POOL: 'get-pool', 
   
   // User functions
   GET_USER_SHARES: 'get-user-shares',
