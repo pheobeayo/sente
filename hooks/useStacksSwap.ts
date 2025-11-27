@@ -26,7 +26,35 @@ export function useStacksSwap() {
   });
 
   /**
-   * Get swap quote using real contract functions
+   * Check if pool exists before getting quote
+   */
+  const checkPoolExists = useCallback(
+    async (tokenIn: string, tokenOut: string): Promise<boolean> => {
+      if (!stxAddress) return false;
+
+      try {
+        const poolData = await stacksDexContract.getPoolInfo(tokenIn, tokenOut, stxAddress);
+        
+        if (!poolData) {
+          console.log('Pool does not exist');
+          return false;
+        }
+
+        const poolInfo = poolData.value || poolData;
+        const reserveX = Number(poolInfo['reserve-x'] || poolInfo.reserveX || 0);
+        const reserveY = Number(poolInfo['reserve-y'] || poolInfo.reserveY || 0);
+
+        return reserveX > 0 && reserveY > 0;
+      } catch (error) {
+        console.error('Error checking pool:', error);
+        return false;
+      }
+    },
+    [stxAddress]
+  );
+
+  /**
+   * Get swap quote with better error handling
    */
   const getQuote = useCallback(
     async (tokenIn: string, tokenOut: string, amountIn: number): Promise<SwapQuote | null> => {
@@ -37,55 +65,30 @@ export function useStacksSwap() {
       try {
         console.log('Getting quote for:', { tokenIn, tokenOut, amountIn, stxAddress });
         
+        // First check if pool exists
+        const poolExists = await checkPoolExists(tokenIn, tokenOut);
+        
+        if (!poolExists) {
+          throw new Error('Pool does not exist or has no liquidity. Please create the pool first or add liquidity.');
+        }
+
         // Get pool information
         const poolData = await stacksDexContract.getPoolInfo(tokenIn, tokenOut, stxAddress);
         
-        console.log('Pool data received:', poolData);
-        
         if (!poolData) {
-          throw new Error('Pool not found - no pool data returned');
+          throw new Error('Unable to fetch pool data. Please try again.');
         }
 
         // Handle different response structures
-        let reserveX = 0;
-        let reserveY = 0;
+        const poolInfo = poolData.value || poolData;
+        
+        const reserveX = Number(poolInfo['reserve-x'] || poolInfo.reserveX || 0);
+        const reserveY = Number(poolInfo['reserve-y'] || poolInfo.reserveY || 0);
 
-        // Check if poolData has a value property (common in Clarity responses)
-        if (poolData.value) {
-          reserveX = Number(
-            poolData.value['reserve-x'] || 
-            poolData.value.reserveX || 
-            poolData.value['reserveA'] ||
-            0
-          );
-          
-          reserveY = Number(
-            poolData.value['reserve-y'] || 
-            poolData.value.reserveY || 
-            poolData.value['reserveB'] ||
-            0
-          );
-        } else {
-          // Direct properties
-          reserveX = Number(
-            poolData['reserve-x'] || 
-            poolData.reserveX || 
-            poolData['reserveA'] ||
-            0
-          );
-          
-          reserveY = Number(
-            poolData['reserve-y'] || 
-            poolData.reserveY || 
-            poolData['reserveB'] ||
-            0
-          );
-        }
-
-        console.log('Extracted reserves:', { reserveX, reserveY });
+        console.log('Pool reserves:', { reserveX, reserveY });
 
         if (reserveX === 0 || reserveY === 0) {
-          throw new Error(`Pool has no liquidity. Reserves: X=${reserveX}, Y=${reserveY}`);
+          throw new Error('Pool has no liquidity. Please add liquidity first to enable swaps.');
         }
 
         // Calculate output using the contract's constant product formula
@@ -98,17 +101,13 @@ export function useStacksSwap() {
         
         console.log('Swap output received:', amountOut);
         
-        // Parse the response - handle various possible structures
+        // Parse the response
         let outputAmount = 0;
         
         if (typeof amountOut === 'number') {
           outputAmount = amountOut;
         } else if (typeof amountOut === 'object' && amountOut !== null) {
-          outputAmount = Number(
-            amountOut.value || 
-            amountOut.amount || 
-            amountOut
-          );
+          outputAmount = Number(amountOut.value || amountOut.amount || amountOut);
         } else {
           outputAmount = Number(amountOut);
         }
@@ -116,7 +115,7 @@ export function useStacksSwap() {
         console.log('Parsed output amount:', outputAmount);
         
         if (isNaN(outputAmount) || outputAmount <= 0) {
-          throw new Error(`Invalid output amount calculated: ${outputAmount}`);
+          throw new Error('Unable to calculate swap output. Please try again.');
         }
         
         // Calculate price impact
@@ -126,7 +125,7 @@ export function useStacksSwap() {
         
         const quote = {
           amountOut: outputAmount,
-          priceImpact: Math.min(priceImpact, 100), // Cap at 100%
+          priceImpact: Math.min(priceImpact, 100),
           fee: 0.003, 
         };
 
@@ -135,17 +134,18 @@ export function useStacksSwap() {
         return quote;
       } catch (error: any) {
         console.error('Error getting quote:', error);
-        console.error('Error details:', {
-          message: error.message,
-          stack: error.stack,
-          tokenIn,
-          tokenOut,
-          amountIn,
-        });
-        throw error;
+        
+        // Provide user-friendly error messages
+        if (error.message.includes('Pool does not exist')) {
+          throw new Error('This trading pair does not exist yet. Go to the Pool page to create it.');
+        } else if (error.message.includes('no liquidity')) {
+          throw new Error('This pool has no liquidity. Add liquidity first to enable trading.');
+        } else {
+          throw error;
+        }
       }
     },
-    [stxAddress]
+    [stxAddress, checkPoolExists]
   );
 
   /**
@@ -175,6 +175,13 @@ export function useStacksSwap() {
       });
 
       try {
+        // Check pool exists before swapping
+        const poolExists = await checkPoolExists(tokenIn, tokenOut);
+        
+        if (!poolExists) {
+          throw new Error('Pool does not exist or has no liquidity. Cannot execute swap.');
+        }
+
         await stacksDexContract.swapTokens(
           tokenIn,
           tokenOut,
@@ -212,7 +219,7 @@ export function useStacksSwap() {
         throw error;
       }
     },
-    [stxAddress, isConnected]
+    [stxAddress, isConnected, checkPoolExists]
   );
 
   /**
@@ -275,5 +282,6 @@ export function useStacksSwap() {
     calculateMinOutput,
     getTransactionStatus,
     resetSwapState,
+    checkPoolExists,
   };
 }

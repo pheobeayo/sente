@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   ArrowDownUp,
   Settings,
@@ -10,30 +11,13 @@ import {
   AlertCircle,
   Loader2,
   TrendingDown,
-  TrendingUp
+  TrendingUp,
+  Plus
 } from 'lucide-react';
 import { useStacksWallet } from '@/hooks/useStacksWallet';
 import { useStacksSwap } from '@/hooks/useStacksSwap';
+import { TOKENS } from '@/constants/Tokens';
 import toast from 'react-hot-toast';
-import stx from "@/public/stx.png";
-import usdc from "@/public/usdc.png";
-import eth from "@/public/eth.png";
-import { StaticImageData } from 'next/image';
-
-interface Token {
-  symbol: string;
-  name: string;
-  address: string;
-  icon: StaticImageData;
-}
-
-// Token list
-const TOKENS: Token[] = [
-  { symbol: 'STX', name: 'Stacks', address: 'ST31JANDZ0HQQPP435G6081XFDWNQ0FH4CJ539HDK.STX', icon: stx },
-  { symbol: 'USDT', name: 'USDT', address: 'ST2QXSK64YQX3CQPC530K79XWQ98XFAM9W3XKEH3N.token-usdt', icon: usdc },
-  { symbol: 'ETH', name: 'Ethereum', address: 'ST1KNS2PT486RDG4FDPPCD87M1NK3XWTXA6WGQN98.ETH', icon: eth },
-  { symbol: 'ETH', name: 'Ether Coin', address: 'ST2JJE7SN8PE4TKD263MXKA18QECWDNFWA7QHGKE1.ETH', icon: eth },
-];
 
 export default function SwapInterface() {
   const { stxAddress, isConnected, balance: walletBalance } = useStacksWallet();
@@ -44,12 +28,13 @@ export default function SwapInterface() {
     getQuote,
     executeSwap,
     calculateMinOutput,
-    resetSwapState
+    resetSwapState,
+    checkPoolExists
   } = useStacksSwap();
 
   // State
-  const [fromToken, setFromToken] = useState<Token>(TOKENS[0]);
-  const [toToken, setToToken] = useState<Token>(TOKENS[1]);
+  const [fromToken, setFromToken] = useState(TOKENS[0]);
+  const [toToken, setToToken] = useState(TOKENS[1]);
   const [fromAmount, setFromAmount] = useState('');
   const [toAmount, setToAmount] = useState('');
   const [fromBalance, setFromBalance] = useState('0');
@@ -61,6 +46,38 @@ export default function SwapInterface() {
   const [showFromTokenList, setShowFromTokenList] = useState(false);
   const [showToTokenList, setShowToTokenList] = useState(false);
   const [priceImpact, setPriceImpact] = useState(0);
+  const [poolExists, setPoolExists] = useState<boolean | null>(null);
+  const [isCheckingPool, setIsCheckingPool] = useState(false);
+
+  // Check if pool exists when tokens change
+  useEffect(() => {
+    const checkPool = async () => {
+      if (!fromToken || !toToken || !stxAddress || fromToken.symbol === toToken.symbol) {
+        setPoolExists(null);
+        return;
+      }
+
+      setIsCheckingPool(true);
+      try {
+        const exists = await checkPoolExists(fromToken.address, toToken.address);
+        setPoolExists(exists);
+        
+        if (!exists) {
+          setToAmount('');
+          setPriceImpact(0);
+        }
+      } catch (error) {
+        console.error('Error checking pool:', error);
+        setPoolExists(false);
+      } finally {
+        setIsCheckingPool(false);
+      }
+    };
+
+    if (isConnected && stxAddress) {
+      checkPool();
+    }
+  }, [fromToken, toToken, stxAddress, isConnected, checkPoolExists]);
 
   // Load balances when tokens or wallet changes
   const loadBalances = useCallback(async () => {
@@ -68,18 +85,16 @@ export default function SwapInterface() {
 
     setIsLoadingBalances(true);
     try {
-      // For STX, use wallet balance
       if (fromToken.symbol === 'STX') {
         setFromBalance(walletBalance);
       } else {
-        // For other tokens, you'd fetch from contract
-        setFromBalance('0'); // Placeholder
+        setFromBalance('0');
       }
 
       if (toToken.symbol === 'STX') {
         setToBalance(walletBalance);
       } else {
-        setToBalance('0'); // Placeholder
+        setToBalance('0');
       }
     } catch (error) {
       console.error('Error loading balances:', error);
@@ -118,26 +133,44 @@ export default function SwapInterface() {
       return;
     }
 
+    // Don't try to get quote if pool doesn't exist
+    if (poolExists === false) {
+      setToAmount('');
+      setPriceImpact(0);
+      return;
+    }
+
     setIsLoadingQuote(true);
     try {
       const quote = await getQuote(
         fromToken.address,
         toToken.address,
-        parseFloat(value) * 1000000 // Convert to microunits
+        parseFloat(value) * 1000000
       );
 
       if (quote) {
         setToAmount((quote.amountOut / 1000000).toFixed(6));
         setPriceImpact(quote.priceImpact);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error getting quote:', error);
-      toast.error('Failed to get quote');
+      const errorMsg = error.message || 'Failed to get quote';
+      
+      // Show user-friendly error
+      if (errorMsg.includes('does not exist')) {
+        toast.error('Pool does not exist. Create it first!');
+      } else if (errorMsg.includes('no liquidity')) {
+        toast.error('Pool has no liquidity. Add liquidity first!');
+      } else {
+        toast.error('Failed to get quote');
+      }
+      
       setToAmount('');
+      setPriceImpact(0);
     } finally {
       setIsLoadingQuote(false);
     }
-  }, [fromToken, toToken, stxAddress, getQuote]);
+  }, [fromToken, toToken, stxAddress, getQuote, poolExists]);
 
   // Handle swap button click
   const handleSwap = async () => {
@@ -145,6 +178,11 @@ export default function SwapInterface() {
 
     if (!isConnected || !stxAddress) {
       toast.error('Please connect your wallet first');
+      return;
+    }
+
+    if (poolExists === false) {
+      toast.error('Pool does not exist. Create it first!');
       return;
     }
 
@@ -161,11 +199,10 @@ export default function SwapInterface() {
         Math.floor(minAmountOut)
       );
 
-      // Transaction initiated successfully
       if (txId) {
         setFromAmount('');
         setToAmount('');
-        loadBalances(); // Reload balances
+        loadBalances();
       }
     } catch (error) {
       console.error('Swap failed:', error);
@@ -183,7 +220,7 @@ export default function SwapInterface() {
   };
 
   // Select token
-  const handleSelectFromToken = (token: Token) => {
+  const handleSelectFromToken = (token: typeof TOKENS[0]) => {
     if (token.symbol === toToken.symbol) {
       setToToken(fromToken);
     }
@@ -193,7 +230,7 @@ export default function SwapInterface() {
     setToAmount('');
   };
 
-  const handleSelectToToken = (token: Token) => {
+  const handleSelectToToken = (token: typeof TOKENS[0]) => {
     if (token.symbol === fromToken.symbol) {
       setFromToken(toToken);
     }
@@ -212,12 +249,12 @@ export default function SwapInterface() {
     parseFloat(toAmount) > 0 &&
     !isSwapping &&
     !isLoadingQuote &&
-    isConnected
+    isConnected &&
+    poolExists === true
   );
 
   const insufficientBalance = Boolean(fromAmount && parseFloat(fromAmount) > parseFloat(fromBalance));
 
-  // Show wallet connection message if not connected
   if (!isConnected) {
     return (
       <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
@@ -234,7 +271,7 @@ export default function SwapInterface() {
 
   return (
     <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
-      {/* Settings Button */}
+      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-white">Swap</h2>
         <button
@@ -257,25 +294,38 @@ export default function SwapInterface() {
               <button
                 key={value}
                 onClick={() => setSlippage(value)}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${slippage === value
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                  slippage === value
                     ? 'bg-purple-600 text-white'
                     : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                  }`}
+                }`}
               >
                 {value}%
               </button>
             ))}
           </div>
-          <input
-            type="number"
-            value={slippage}
-            onChange={(e) => setSlippage(parseFloat(e.target.value) || 0.5)}
-            step="0.1"
-            min="0.1"
-            max="50"
-            className="w-full mt-3 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-            placeholder="Custom"
-          />
+        </div>
+      )}
+
+      {/* Pool Status Warning */}
+      {poolExists === false && !isCheckingPool && (
+        <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-yellow-400 font-medium">Pool Doesn't Exist</p>
+              <p className="text-yellow-300 text-sm mt-1">
+                The {fromToken.symbol}/{toToken.symbol} pool hasn't been created yet.
+              </p>
+              <Link
+                href="/pool"
+                className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                Create Pool
+              </Link>
+            </div>
+          </div>
         </div>
       )}
 
@@ -295,6 +345,14 @@ export default function SwapInterface() {
         <div className="mb-4 p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
           <p className="text-green-400 font-medium">Swap Successful!</p>
           <p className="text-green-300 text-sm mt-1 break-all">TX: {txId}</p>
+          <a
+            href={`https://explorer.hiro.so/txid/${txId}?chain=testnet`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-green-400 hover:text-green-300 text-sm mt-2 inline-block"
+          >
+            View on Explorer →
+          </a>
         </div>
       )}
 
@@ -330,7 +388,7 @@ export default function SwapInterface() {
               value={fromAmount}
               onChange={(e) => handleFromAmountChange(e.target.value)}
               placeholder="0.0"
-              disabled={isSwapping}
+              disabled={isSwapping || poolExists === false}
               className="flex-1 bg-transparent text-white text-2xl font-bold outline-none placeholder-gray-600 disabled:opacity-50"
             />
           </div>
@@ -341,7 +399,8 @@ export default function SwapInterface() {
             {!isLoadingBalances && parseFloat(fromBalance) > 0 && (
               <button
                 onClick={() => handleFromAmountChange(fromBalance)}
-                className="text-blue-400 text-sm hover:text-blue-300 transition-colors"
+                disabled={poolExists === false}
+                className="text-blue-400 text-sm hover:text-blue-300 transition-colors disabled:opacity-50"
               >
                 MAX
               </button>
@@ -389,7 +448,7 @@ export default function SwapInterface() {
               <ChevronDown className="w-4 h-4 text-gray-400" />
             </button>
             <div className="flex-1 text-right">
-              {isLoadingQuote ? (
+              {isLoadingQuote || isCheckingPool ? (
                 <Loader2 className="w-6 h-6 text-gray-400 animate-spin ml-auto" />
               ) : (
                 <div className="text-white text-2xl font-bold">
@@ -407,7 +466,7 @@ export default function SwapInterface() {
       </div>
 
       {/* Price Info */}
-      {fromAmount && toAmount && !isLoadingQuote && (
+      {fromAmount && toAmount && !isLoadingQuote && poolExists && (
         <div className="mb-6 p-4 bg-white/5 rounded-xl space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-400">Rate</span>
@@ -417,8 +476,9 @@ export default function SwapInterface() {
           </div>
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-400">Price Impact</span>
-            <span className={`font-medium flex items-center gap-1 ${priceImpact > 5 ? 'text-red-400' : priceImpact > 2 ? 'text-yellow-400' : 'text-green-400'
-              }`}>
+            <span className={`font-medium flex items-center gap-1 ${
+              priceImpact > 5 ? 'text-red-400' : priceImpact > 2 ? 'text-yellow-400' : 'text-green-400'
+            }`}>
               {priceImpact > 2 ? <TrendingDown className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />}
               {priceImpact.toFixed(2)}%
             </span>
@@ -439,17 +499,18 @@ export default function SwapInterface() {
       {/* Swap Button */}
       <button
         onClick={handleSwap}
-        disabled={!canSwap || insufficientBalance}
+        disabled={!canSwap || insufficientBalance || poolExists === false}
         className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold transition-all"
       >
-        {insufficientBalance ? 'Insufficient Balance' :
+        {poolExists === false ? 'Pool Does Not Exist' :
+          insufficientBalance ? 'Insufficient Balance' :
           !fromAmount ? 'Enter an amount' :
-            isSwapping ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Swapping...
-              </span>
-            ) : 'Swap'}
+          isSwapping ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Swapping...
+            </span>
+          ) : 'Swap'}
       </button>
 
       {/* Info */}
@@ -460,7 +521,7 @@ export default function SwapInterface() {
         </p>
       </div>
 
-      {/* Token Selection Modal - From */}
+      {/* Token Selection Modals */}
       {showFromTokenList && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-800 rounded-2xl p-6 max-w-md w-full border border-white/10">
@@ -476,7 +537,7 @@ export default function SwapInterface() {
             <div className="space-y-2">
               {TOKENS.map((token) => (
                 <button
-                  key={token.symbol}
+                  key={token.symbol + token.address}
                   onClick={() => handleSelectFromToken(token)}
                   className="w-full flex items-center gap-4 p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all"
                 >
@@ -501,7 +562,6 @@ export default function SwapInterface() {
         </div>
       )}
 
-      {/* Token Selection Modal - To */}
       {showToTokenList && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-800 rounded-2xl p-6 max-w-md w-full border border-white/10">
@@ -517,7 +577,7 @@ export default function SwapInterface() {
             <div className="space-y-2">
               {TOKENS.map((token) => (
                 <button
-                  key={token.symbol}
+                  key={token.symbol + token.address}
                   onClick={() => handleSelectToToken(token)}
                   className="w-full flex items-center gap-4 p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all"
                 >
