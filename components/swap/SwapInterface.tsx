@@ -152,9 +152,9 @@ export default function SwapInterface() {
         setToAmount((quote.amountOut / 1000000).toFixed(6));
         setPriceImpact(quote.priceImpact);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error getting quote:', error);
-      const errorMsg = error.message || 'Failed to get quote';
+      const errorMsg = error instanceof Error ? error.message : 'Failed to get quote';
       
       // Show user-friendly error
       if (errorMsg.includes('does not exist')) {
@@ -313,9 +313,9 @@ export default function SwapInterface() {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-yellow-400 font-medium">Pool Doesn't Exist</p>
+              <p className="text-yellow-400 font-medium">Pool Does Not Exist</p>
               <p className="text-yellow-300 text-sm mt-1">
-                The {fromToken.symbol}/{toToken.symbol} pool hasn't been created yet.
+                The {fromToken.symbol}/{toToken.symbol} pool has not been created yet.
               </p>
               <Link
                 href="/pool"
