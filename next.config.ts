@@ -1,40 +1,23 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Enable React strict mode for better development experience
   reactStrictMode: true,
-
-  // Configure image domains if using external images
   images: {
-    domains: ['placeholder.com'], // Add any external image domains here
-    unoptimized: true, // For static export if needed
+    domains: ['placeholder.com'],
+    unoptimized: true,
   },
-
-  // Add headers to handle CORS for API requests
   async headers() {
     return [
       {
-        // Apply these headers to all routes
         source: '/:path*',
         headers: [
-          {
-            key: 'Access-Control-Allow-Origin',
-            value: '*',
-          },
-          {
-            key: 'Access-Control-Allow-Methods',
-            value: 'GET, POST, PUT, DELETE, OPTIONS',
-          },
-          {
-            key: 'Access-Control-Allow-Headers',
-            value: 'Content-Type, Authorization',
-          },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, DELETE, OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
         ],
       },
     ];
   },
-
-  // Add rewrites to proxy API requests and avoid CORS issues
   async rewrites() {
     return [
       {
@@ -44,22 +27,6 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // Webpack configuration
-  webpack: (config, { isServer }) => {
-    // Fixes for various packages
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        tls: false,
-      };
-    }
-
-    return config;
-  },
-
-  // Environment variables available to the browser
   env: {
     NEXT_PUBLIC_STACKS_API_URL: process.env.NEXT_PUBLIC_STACKS_API_URL || 'https://api.testnet.hiro.so',
     NEXT_PUBLIC_CONTRACT_ADDRESS: process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || 'ST2685JDP18T2355FS34JER4D8MG3Y74XKA7PDQHJ',
